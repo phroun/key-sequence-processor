@@ -128,6 +128,52 @@ func TestControlPrefixSpellings(t *testing.T) {
 	}
 }
 
+// The caret is also an ordinary character, and stays mappable as one. Peeling
+// modifiers must not eat the whole token, and a bare caret must not be read as
+// Control-of-nothing: it names the key a user types, alongside "^^" for
+// Ctrl-caret and "^C" for a real control chord.
+func TestBareCaretIsAKey(t *testing.T) {
+	p := NewProcessor(nil)
+	p.SetMappings(map[string]string{"^": "caret", "^^": "ctrl_caret", "^C": "ctrl_c"})
+	for _, c := range []struct{ pressed, want string }{
+		{"^", "caret"}, {"^^", "ctrl_caret"}, {"^C", "ctrl_c"},
+	} {
+		p.ClearActiveSequence()
+		if got := p.ProcessKey(c.pressed).Command; got != c.want {
+			t.Errorf("%q -> %q, want %q", c.pressed, got, c.want)
+		}
+	}
+
+	// It works in every slot of a chord, and under a modifier.
+	for _, c := range []struct {
+		bound string
+		keys  []string
+	}{
+		{"^ x", []string{"^", "x"}},
+		{"x ^", []string{"x", "^"}},
+		{"^K ^", []string{"^K", "^"}},
+		{"M-^", []string{"M-^"}},
+	} {
+		if got := bindAndPress(t, nil, c.bound, c.keys...); got != "TARGET" {
+			t.Errorf("bound %q, pressed %v -> %q, want TARGET", c.bound, c.keys, got)
+		}
+	}
+
+	// ...and it does NOT open a control chord, so the control/case ladder stays
+	// off for what follows it: a bound "^ M" is caret-then-M and nothing else.
+	for _, c := range []struct {
+		bound string
+		keys  []string
+	}{
+		{"^ M", []string{"^", "^M"}},
+		{"^ m", []string{"^", "^M"}},
+	} {
+		if got := bindAndPress(t, nil, c.bound, c.keys...); got == "TARGET" {
+			t.Errorf("bound %q matched %v; a bare caret is a character, not Control", c.bound, c.keys)
+		}
+	}
+}
+
 // A spelling is still a lookup, not a rewrite: naming the symbol directly wins
 // over the word, and the control ladder is untouched by the modifier pass.
 func TestSpellingsStayNonDestructive(t *testing.T) {

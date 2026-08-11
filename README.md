@@ -235,3 +235,6 @@ MIT — see [LICENSE](LICENSE).
   would otherwise fight over.
 - The control/case ladder is unchanged and still contextual: a plain letter
   admits its control form only inside a control-started chord.
+- Fixed: a bare `^` is the caret character and is mappable as one. It was read
+  as a control chord, which switched the control/case ladder on for whatever
+  followed it, so a sequence bound `^ M` also answered to caret then Ctrl-M.

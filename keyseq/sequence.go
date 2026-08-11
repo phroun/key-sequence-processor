@@ -524,8 +524,15 @@ var controlPrefixes = []string{"^", "C-"}
 
 // isControlSpelling reports whether a key token names a Control chord, under
 // either spelling of the modifier.
+//
+// A modifier needs something to modify: a bare "^" is the caret CHARACTER, a
+// key a user can type and map like any other, not Control-of-nothing. Reading
+// it as a control chord would switch the control/case ladder on for whatever
+// followed it, so a sequence bound "^ M" would also answer to caret then
+// Ctrl-M. The same goes for a bare "C-".
 func isControlSpelling(key string) bool {
-	return strings.HasPrefix(key, "^") || strings.HasPrefix(key, "C-")
+	return (strings.HasPrefix(key, "^") && len(key) > 1) ||
+		(strings.HasPrefix(key, "C-") && len(key) > 2)
 }
 
 // prefixSpellings returns every way a stack of modifier prefixes can be
