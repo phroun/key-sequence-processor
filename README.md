@@ -116,10 +116,22 @@ user what a key would do.
 ## Key aliases
 
 A terminal sends the same byte for `Tab` as for `^I`, so a binding written
-either way should reach the same place. `DefaultAliasGroups` covers those
-cases in [direct-key-handler](https://github.com/phroun/direct-key-handler)'s
-vocabulary — `Tab`/`^I`, `Return`/`^M`, `Escape`/`^[`/`^3`, `Backspace`/`^H`,
-and the control-number spellings.
+either way should reach the same place. `DefaultAliasGroups` covers those cases
+in [direct-key-handler](https://github.com/phroun/direct-key-handler)'s
+vocabulary. The first entry of each group is the primary; the rest are
+spellings a binding may use.
+
+| Key | Spellings | Why |
+|-----|-----------|-----|
+| `Backspace` | `^H`, `^8` | `^H` is BS (8); `^8` is DEL (127), which arrives as Backspace |
+| `Tab` | `^I` | one byte (9) for both |
+| `Return` | `^M` | one byte (13) for both |
+| `Escape` | `^[`, `^3` | one byte (27); `^3` is how a keyboard makes it with a digit |
+| `^@` | `^2`, `^space` | NUL, also Ctrl+Space |
+| `^\` | `^4` | FS |
+| `^]` | `^5` | GS |
+| `^^` | `^6` | RS |
+| `^_` | `^7` | US |
 
 `Return` and `Enter` are deliberately **not** aliased: they are two physical
 keys, and folding them is an application's decision, not a default that quietly
@@ -135,9 +147,17 @@ A second kind of entry names a key that has only one real token. Nothing ever
 *emits* `Minus`; the word exists so a binding can be written without fighting
 the syntax it is written in — `-` is the modifier separator, so `M--` reads
 badly and `^-` cannot show where the modifier stops. (The processor already
-depends on this for `space`, which cannot be spelled literally at all.) The
-defaults cover `Minus Plus Equals Apos Quote Tilde Wave Backtick Backslash
-Slash Semicolon Colon Pipe`.
+depends on this for `space`, which cannot be spelled literally at all.)
+
+| Key | Spelling | | Key | Spelling |
+|-----|----------|-|-----|----------|
+| `-` | `Minus` | | `\` | `Backslash` |
+| `+` | `Plus` | | `/` | `Slash` |
+| `=` | `Equals` | | `;` | `Semicolon` |
+| `'` | `Apos` | | `:` | `Colon` |
+| `"` | `Quote` | | \| | `Pipe` |
+| `~` | `Tilde`, `Wave` | | | |
+| `` ` `` | `Backtick` | | | |
 
 Spellings resolve through modifiers, not just on a bare key: the prefix stack is
 peeled off, the base varied, and the prefix put back, so `M-Minus` and `M--`
