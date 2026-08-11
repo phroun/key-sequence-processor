@@ -222,9 +222,9 @@ MIT — see [LICENSE](LICENSE).
 
 - Aliases resolve in **every** position of a sequence, not only at the tail and
   not only one per chord. A chord bound `esc x` could not be typed `^[ x` at
-  all — the starter was not recognized, so the chord never began — and
-  `^K Minus Minus` matched neither slot. Alias spellings of a bound starter are
-  now registered as starters too.
+  all — the initiator was not recognized, so the chord never began — and
+  `^K Minus Minus` matched neither slot. Alias spellings of a bound initiator are
+  now registered as initiators too.
 - Aliases resolve **through modifier prefixes**: the prefix stack is peeled off,
   the base varied, and the prefix restored, so `M-Minus` and `M--` name one key.
 - `^` and `C-` are recognized as one modifier under two spellings, in bindings
@@ -241,9 +241,9 @@ MIT — see [LICENSE](LICENSE).
 - Fixed: the first key of a chord now varies exactly as the others do. A chord
   bound `M x` could not be opened with a lowercase `m` — the prefix was never
   held, so the tail's case-insensitivity was unreachable. Only single-letter
-  starters are affected.
+  initiators are affected.
 
-**Note on letter starters:** binding a chord whose first key is an ordinary
+**Note on letter initiators:** binding a chord whose first key is an ordinary
 character makes that character a prefix, so typing it waits for the next key
 and an abandoned chord discards both. That has always been true of the bound
 spelling; it now applies to the other case as well. Control keys and named
