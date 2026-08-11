@@ -145,29 +145,65 @@ func NewProcessor(executor CommandExecutor) *Processor {
 		controlSequenceStarters: make(map[string]bool),
 		keyBuffer:               make([]string, 0),
 	}
-	sp.initializeKeyAliases()
+	sp.applyAliasGroups(DefaultAliasGroups())
 	sp.rebuild()
 	return sp
 }
 
-// initializeKeyAliases sets up key alias mappings.
-func (sp *Processor) initializeKeyAliases() {
-	// Equivalent keys (first entry is primary, others are aliases)
-	aliasGroups := [][]string{
-		{"back", "^H", "backspace"},
-		{"tab", "^I"},
-		{"return", "enter", "^M"},
-		{"fdel", "delete"},
-		{"^space", "^2"},
-		{"esc", "escape", "^[", "^3"},
+// AliasGroup is a set of interchangeable spellings for one key. The FIRST
+// entry is the primary — the name a key actually arrives under — and the rest
+// are spellings a binding may use for it, so `^I` and `Tab` reach the same
+// binding whichever one the keymap wrote.
+type AliasGroup []string
+
+// DefaultAliasGroups returns the aliases a Processor starts with: the control
+// characters a terminal cannot distinguish from a named key, spelled in
+// github.com/phroun/direct-key-handler's vocabulary, which is the vocabulary
+// this package documents its examples in.
+//
+// An application with its own key names supplies its own groups
+// (SetAliasGroups) — these are a sensible default, not an assumption.
+//
+// Return and Enter are deliberately NOT aliased. They are two physical keys
+// (the home row's and the keypad's); an application that wants them
+// interchangeable says so, rather than losing the distinction by default.
+func DefaultAliasGroups() []AliasGroup {
+	return []AliasGroup{
+		// A terminal sends the same byte for these as for the control chord,
+		// so the two spellings name one key.
+		{"Backspace", "^H", "^8"}, // ^8 is DEL (127), which arrives as Backspace
+		{"Tab", "^I"},
+		{"Return", "^M"},
+		{"Escape", "^[", "^3"},
+
+		// Control-number spellings for the control characters that have no
+		// letter: a keyboard produces these with Ctrl and a digit.
+		{"^@", "^2", "^space"}, // NUL, also Ctrl+Space
 		{"^\\", "^4"},
 		{"^]", "^5"},
 		{"^^", "^6"},
 		{"^_", "^7"},
-		{"del", "^8"},
 	}
+}
 
-	for _, group := range aliasGroups {
+// SetAliasGroups replaces the alias groups (see AliasGroup). Pass nil to drop
+// aliasing entirely — an application whose key names carry no such ambiguity
+// wants no fallbacks invented for it.
+//
+// Call before mapping keys: the parsed keymap is rebuilt from the new groups.
+func (sp *Processor) SetAliasGroups(groups []AliasGroup) {
+	sp.keyAliases = make(map[string]string)
+	sp.simpleControls = make(map[string]string)
+	sp.applyAliasGroups(groups)
+	sp.rebuild()
+}
+
+// applyAliasGroups indexes groups into the lookup maps resolution uses.
+func (sp *Processor) applyAliasGroups(groups []AliasGroup) {
+	for _, group := range groups {
+		if len(group) == 0 {
+			continue
+		}
 		primary := group[0]
 		for _, alias := range group[1:] {
 			if len(alias) == 2 && alias[0] == '^' {

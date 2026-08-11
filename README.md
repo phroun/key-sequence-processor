@@ -15,7 +15,7 @@ Pure Go, standard library only.
 - Precedence levels (`capture` / `override`) so a hosted layer can claim keys
 - Per-level wildcards, and specific bindings that shadow them
 - A binding can decline a key and drop resolution to the level below
-- Key aliases (`^H` = `back`, `^M` = `return`, …)
+- Configurable key aliases (`^I` = `Tab`, `^M` = `Return`, …)
 - Context-sensitive help topics per sequence prefix
 - Completion listing for a partially typed sequence
 - Optional macOS Option-character layer for unbound Meta keys, on any platform
@@ -113,6 +113,30 @@ Pass a `nil` executor and nothing is dispatched: `ProcessKey` reports the
 top-precedence command in `ProcessResult.Command` instead. Useful for showing a
 user what a key would do.
 
+## Key aliases
+
+A terminal sends the same byte for `Tab` as for `^I`, so a binding written
+either way should reach the same place. `DefaultAliasGroups` covers those
+cases in [direct-key-handler](https://github.com/phroun/direct-key-handler)'s
+vocabulary — `Tab`/`^I`, `Return`/`^M`, `Escape`/`^[`/`^3`, `Backspace`/`^H`,
+and the control-number spellings.
+
+`Return` and `Enter` are deliberately **not** aliased: they are two physical
+keys, and folding them is an application's decision, not a default that quietly
+discards the distinction.
+
+An application with its own key names supplies its own groups — first entry is
+the primary, the rest are spellings a binding may use:
+
+```go
+p.SetAliasGroups([]keyseq.AliasGroup{
+	{"esc", "escape", "^["},
+	{"back", "^H", "backspace"},
+})
+```
+
+Pass `nil` to drop aliasing entirely.
+
 ## The Option-character layer
 
 A terminal forces an either/or: Option is Meta, or Option types characters —
@@ -165,3 +189,12 @@ MIT — see [LICENSE](LICENSE).
 - The Option-character layer stayed, and no longer consults the host OS:
   `SetMacOptionInsert` / `MacOptionChar` report the character, the application
   spells the command.
+
+### 0.1.1
+
+- Key aliases became configurable (`SetAliasGroups`, `AliasGroup`), and the
+  defaults now use direct-key-handler's vocabulary (`Tab`, `Return`, `Escape`,
+  `Backspace`) rather than one editor's. `Return` and `Enter` are no longer
+  aliased to each other.
+- **Upgrading:** an application whose key names differ from the defaults must
+  now declare its own groups; previously one editor's were assumed.

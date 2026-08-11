@@ -149,14 +149,15 @@ func TestSequenceAliasControlGate(t *testing.T) {
 }
 
 // Named keys with control aliases resolve in both cases through the variant
-// layer (return ~ ^M ~ M ~ m within a control-started sequence).
+// layer (Return ~ ^M ~ M ~ m within a control-started sequence). The name is
+// the default alias vocabulary's, not any one application's.
 func TestSequenceAliasNamedControl(t *testing.T) {
 	m := map[string]string{
 		"^K m": "mark_binding",
 	}
-	fired, _ := aliasHarness(t, m, "^K", "return")
+	fired, _ := aliasHarness(t, m, "^K", "Return")
 	if len(fired) != 1 || fired[0] != "mark_binding" {
-		t.Fatalf("return should reach ^K m via ^M -> m; fired %v", fired)
+		t.Fatalf("Return should reach ^K m via ^M -> m; fired %v", fired)
 	}
 	if strings.Contains(strings.Join(fired, " "), "insert") {
 		t.Fatalf("no fallthrough insert expected; fired %v", fired)
