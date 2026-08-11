@@ -18,6 +18,7 @@ Pure Go, standard library only.
 - Key aliases (`^H` = `back`, `^M` = `return`, …)
 - Context-sensitive help topics per sequence prefix
 - Completion listing for a partially typed sequence
+- Optional macOS Option-character layer for unbound Meta keys, on any platform
 - No opinion about your key names, your commands, or what an unbound key does
 
 ## Installation
@@ -112,6 +113,35 @@ Pass a `nil` executor and nothing is dispatched: `ProcessKey` reports the
 top-precedence command in `ProcessResult.Command` instead. Useful for showing a
 user what a key would do.
 
+## The Option-character layer
+
+A terminal forces an either/or: Option is Meta, or Option types characters —
+not both. `SetMacOptionInsert(true)` restores the missing half from the binding
+side. An `M-` key no binding claimed reports the character Option composes, so
+bindings take the combos they name and every other combo still types:
+
+```go
+p.SetMacOptionInsert(true)
+p.SetDefaultHandler(func(key string) string {
+	if ch, ok := p.MacOptionChar(key); ok { // "M-d" -> "∂"
+		return "insert '" + ch + "'"
+	}
+	return ""
+})
+```
+
+It is a **user setting, never a property of the host OS** — nothing here reads
+`runtime.GOOS`. Someone typing on a Mac keyboard through an SSH session to a
+Linux box wants this layer, and the far end cannot see their keyboard. It also
+gives a Linux or Windows terminal mac-style Option typing it never had.
+
+The inverse — decoding the composed character back into an `M-` name so it can
+be bound at all — is the input decoder's half, and
+[direct-key-handler](https://github.com/phroun/direct-key-handler) carries it
+as `DecodeMacOSOption`. The two are useful independently: with the decoder on,
+`M-x` is bindable without writing `≈`; with only this layer, a terminal already
+in Meta mode can still type Option characters.
+
 ## Help topics
 
 Map the reserved pseudo-key `help` under a prefix and `HelpTopic` finds the
@@ -132,3 +162,6 @@ MIT — see [LICENSE](LICENSE).
 - Default handling for unbound keys became the application's, through
   `SetDefaultHandler`, rather than a table of one editor's command names.
 - `SequenceProcessor` is now `keyseq.Processor`.
+- The Option-character layer stayed, and no longer consults the host OS:
+  `SetMacOptionInsert` / `MacOptionChar` report the character, the application
+  spells the command.

@@ -117,6 +117,9 @@ type Processor struct {
 	// defaultHandler supplies the command for an unbound key.
 	defaultHandler DefaultHandler
 
+	// macOptionInsert enables the Option-character layer (see MacOptionChar).
+	macOptionInsert bool
+
 	// Sequence tracking
 	sequenceStarters        map[string]bool
 	controlSequenceStarters map[string]bool
