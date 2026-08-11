@@ -114,6 +114,11 @@ type Processor struct {
 	keyAliases     map[string]string
 	simpleControls map[string]string
 
+	// aliasGroupOf maps every spelling to the full group it belongs to, so a
+	// token can be expanded to its equivalents wherever it sits in a sequence
+	// — not only at the tail, and not only as a continuation key.
+	aliasGroupOf map[string][]string
+
 	// defaultHandler supplies the command for an unbound key.
 	defaultHandler DefaultHandler
 
@@ -194,15 +199,23 @@ func DefaultAliasGroups() []AliasGroup {
 func (sp *Processor) SetAliasGroups(groups []AliasGroup) {
 	sp.keyAliases = make(map[string]string)
 	sp.simpleControls = make(map[string]string)
+	sp.aliasGroupOf = make(map[string][]string)
 	sp.applyAliasGroups(groups)
 	sp.rebuild()
 }
 
 // applyAliasGroups indexes groups into the lookup maps resolution uses.
 func (sp *Processor) applyAliasGroups(groups []AliasGroup) {
+	if sp.aliasGroupOf == nil {
+		sp.aliasGroupOf = make(map[string][]string)
+	}
 	for _, group := range groups {
 		if len(group) == 0 {
 			continue
+		}
+		members := append([]string(nil), group...)
+		for _, m := range members {
+			sp.aliasGroupOf[m] = members
 		}
 		primary := group[0]
 		for _, alias := range group[1:] {
@@ -441,16 +454,43 @@ func (sp *Processor) updateSequenceStarters() {
 	sp.controlSequenceStarters = make(map[string]bool)
 
 	for key := range sp.allKeys {
-		if strings.Contains(key, " ") {
-			parts := strings.Split(key, " ")
-			firstPart := parts[0]
-			sp.sequenceStarters[firstPart] = true
+		if !strings.Contains(key, " ") {
+			continue
+		}
+		firstPart := strings.Split(key, " ")[0]
+		control := strings.HasPrefix(firstPart, "^")
 
-			if strings.HasPrefix(firstPart, "^") {
-				sp.controlSequenceStarters[firstPart] = true
+		// Every spelling of the starter opens the sequence, or a chord bound
+		// as "esc x" could not be typed with the Escape key's control form:
+		// the starter would not be held as a prefix and the chord would never
+		// begin. Control-ness follows the BOUND spelling, so an alias does not
+		// silently turn a named chord into a control one.
+		starters := sp.aliasGroupOf[firstPart]
+		if len(starters) == 0 {
+			starters = []string{firstPart}
+		}
+		for _, sp2 := range starters {
+			sp.sequenceStarters[sp2] = true
+			if control {
+				sp.controlSequenceStarters[sp2] = true
 			}
 		}
 	}
+}
+
+// isControlStarter reports whether a sequence beginning with this key is a
+// control chord, considering every spelling of the key: the answer must not
+// change with which equivalent name the user happened to press.
+func (sp *Processor) isControlStarter(key string) bool {
+	if sp.controlSequenceStarters[key] {
+		return true
+	}
+	for _, sib := range sp.aliasGroupOf[key] {
+		if sp.controlSequenceStarters[sib] {
+			return true
+		}
+	}
+	return false
 }
 
 // GetActiveSequence returns the current active sequence.
@@ -606,13 +646,25 @@ func (sp *Processor) getKeyFallbacks(sequence string) []string {
 	// map uses, even when several parts are aliased simultaneously ("^O ^V C"
 	// for a mapped "^O V ^C"). The as-pressed sequence enumerates first, so an
 	// exact mapping always wins over an alias.
-	if strings.Contains(sequence, " ") {
-		parts := strings.Split(sequence, " ")
-		isControlStarter := sp.controlSequenceStarters[parts[0]]
+	// Every token admits its equivalent spellings, combined across ALL parts at
+	// once — a key must reach its mapping whichever spelling the map uses,
+	// wherever in the chord it sits and however many parts are aliased at the
+	// same time ("^O ^V C" for a mapped "^O V ^C", "^K minus minus" for
+	// "^K - -", "^[ x" for "esc x"). The as-pressed sequence enumerates first,
+	// so an exact mapping always wins over an alias.
+	if parts := strings.Split(sequence, " "); len(parts) > 1 {
+		// Control-ness is a property of the chord being typed, decided by the
+		// starter as pressed, and it applies only to CONTINUATION keys: a bare
+		// "M" must never match a bound "^M".
+		isControlStarter := sp.isControlStarter(parts[0])
 
-		seqs := []string{parts[0]}
-		for i := 1; i < len(parts); i++ {
-			variants := sp.partVariants(parts[i], isControlStarter)
+		seqs := []string{}
+		for i, part := range parts {
+			variants := sp.partVariants(part, isControlStarter && i > 0)
+			if i == 0 {
+				seqs = variants
+				continue
+			}
 			next := make([]string, 0, len(seqs)*len(variants))
 			for _, prefix := range seqs {
 				for _, v := range variants {
@@ -620,8 +672,8 @@ func (sp *Processor) getKeyFallbacks(sequence string) []string {
 				}
 			}
 			seqs = next
-			if len(seqs) > 256 {
-				seqs = seqs[:256] // runaway guard; real chords are 2-4 parts
+			if len(seqs) > 1024 {
+				seqs = seqs[:1024] // runaway guard; real chords are 2-4 parts
 			}
 		}
 		for _, s := range seqs {
@@ -631,13 +683,12 @@ func (sp *Processor) getKeyFallbacks(sequence string) []string {
 		}
 	}
 
-	// Check for key aliases
-	for alias, primary := range sp.keyAliases {
-		if strings.HasSuffix(sequence, primary) {
-			fallbacks = append(fallbacks, sequence[:len(sequence)-len(primary)]+alias)
-		}
-		if strings.HasSuffix(sequence, alias) {
-			fallbacks = append(fallbacks, sequence[:len(sequence)-len(alias)]+primary)
+	// A single key has no parts loop above, so expand its group here.
+	if !strings.Contains(sequence, " ") {
+		for _, sib := range sp.aliasGroupOf[sequence] {
+			if sib != sequence {
+				fallbacks = append(fallbacks, sib)
+			}
 		}
 	}
 
@@ -672,6 +723,12 @@ func (sp *Processor) partVariants(part string, controlSeq bool) []string {
 		if controlSeq {
 			add("^" + strings.ToUpper(part)) // control keys are canonically ^X
 		}
+	}
+	// Alias-group siblings apply at ANY position and in any context: esc/^[ or
+	// minus/- name one key wherever they appear, unlike the control/case layer
+	// below, which is only meaningful for a continuation key.
+	for _, sib := range sp.aliasGroupOf[part] {
+		add(sib)
 	}
 	if controlSeq {
 		if cv := sp.getSimpleControl(part); cv != "" {
