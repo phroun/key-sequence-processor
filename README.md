@@ -125,6 +125,25 @@ and the control-number spellings.
 keys, and folding them is an application's decision, not a default that quietly
 discards the distinction.
 
+Aliases are lookups, never rewrites. The spelling as pressed is tried first, so
+naming both `^H` and `Backspace` keeps them separately bindable — a group only
+fills in when the keymap left one of its spellings unnamed.
+
+### Spellings
+
+A second kind of entry names a key that has only one real token. Nothing ever
+*emits* `Minus`; the word exists so a binding can be written without fighting
+the syntax it is written in — `-` is the modifier separator, so `M--` reads
+badly and `^-` cannot show where the modifier stops. (The processor already
+depends on this for `space`, which cannot be spelled literally at all.) The
+defaults cover `Minus Plus Equals Apos Quote Tilde Wave Backtick Backslash
+Slash Semicolon Colon Pipe`.
+
+Spellings resolve through modifiers, not just on a bare key: the prefix stack is
+peeled off, the base varied, and the prefix put back, so `M-Minus` and `M--`
+name one key. `^` and `C-` are one modifier under two spellings, so `^-`,
+`^Minus`, `C--` and `C-Minus` all reach the same binding.
+
 An application with its own key names supplies its own groups — first entry is
 the primary, the rest are spellings a binding may use:
 
@@ -198,3 +217,21 @@ MIT — see [LICENSE](LICENSE).
   aliased to each other.
 - **Upgrading:** an application whose key names differ from the defaults must
   now declare its own groups; previously one editor's were assumed.
+
+### 0.1.2
+
+- Aliases resolve in **every** position of a sequence, not only at the tail and
+  not only one per chord. A chord bound `esc x` could not be typed `^[ x` at
+  all — the starter was not recognized, so the chord never began — and
+  `^K Minus Minus` matched neither slot. Alias spellings of a bound starter are
+  now registered as starters too.
+- Aliases resolve **through modifier prefixes**: the prefix stack is peeled off,
+  the base varied, and the prefix restored, so `M-Minus` and `M--` name one key.
+- `^` and `C-` are recognized as one modifier under two spellings, in bindings
+  and in control-chord detection alike (`C-B M` completes on `C-B ^M`).
+- Added word **spellings** for punctuation to the defaults — `Minus`, `Plus`,
+  `Equals`, `Apos`, `Quote`, `Tilde`/`Wave`, `Backtick`, `Backslash`, `Slash`,
+  `Semicolon`, `Colon`, `Pipe` — so a binding can name a key the binding syntax
+  would otherwise fight over.
+- The control/case ladder is unchanged and still contextual: a plain letter
+  admits its control form only inside a control-started chord.

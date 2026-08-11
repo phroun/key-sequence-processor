@@ -188,6 +188,26 @@ func DefaultAliasGroups() []AliasGroup {
 		{"^]", "^5"},
 		{"^^", "^6"},
 		{"^_", "^7"},
+
+		// Word spellings for punctuation. These are not equivalences between
+		// two keys — nothing ever emits "Minus"; the word exists only so a
+		// binding can be WRITTEN without fighting the syntax it is written in.
+		// "-" is the modifier separator, so "M--" reads badly and parses worse;
+		// "M-Minus" says the same thing plainly. (The processor already relies
+		// on this for the spacebar, which cannot be spelled literally at all,
+		// since a key name may not contain a space.)
+		{"-", "Minus"},
+		{"+", "Plus"},
+		{"=", "Equals"},
+		{"'", "Apos"},
+		{"\"", "Quote"},
+		{"~", "Tilde", "Wave"},
+		{"`", "Backtick"},
+		{"\\", "Backslash"},
+		{"/", "Slash"},
+		{";", "Semicolon"},
+		{":", "Colon"},
+		{"|", "Pipe"},
 	}
 }
 
@@ -458,17 +478,14 @@ func (sp *Processor) updateSequenceStarters() {
 			continue
 		}
 		firstPart := strings.Split(key, " ")[0]
-		control := strings.HasPrefix(firstPart, "^")
+		control := isControlSpelling(firstPart)
 
 		// Every spelling of the starter opens the sequence, or a chord bound
 		// as "esc x" could not be typed with the Escape key's control form:
 		// the starter would not be held as a prefix and the chord would never
 		// begin. Control-ness follows the BOUND spelling, so an alias does not
 		// silently turn a named chord into a control one.
-		starters := sp.aliasGroupOf[firstPart]
-		if len(starters) == 0 {
-			starters = []string{firstPart}
-		}
+		starters := append([]string{firstPart}, sp.aliasSiblings(firstPart)...)
 		for _, sp2 := range starters {
 			sp.sequenceStarters[sp2] = true
 			if control {
@@ -485,12 +502,122 @@ func (sp *Processor) isControlStarter(key string) bool {
 	if sp.controlSequenceStarters[key] {
 		return true
 	}
-	for _, sib := range sp.aliasGroupOf[key] {
+	for _, sib := range sp.aliasSiblings(key) {
 		if sp.controlSequenceStarters[sib] {
 			return true
 		}
 	}
 	return false
+}
+
+// modifierPrefixes are the modifier spellings that stack in front of a base key
+// name, matching direct-key-handler's vocabulary, plus the caret that spells
+// Control. The caret takes no separator, which is the whole reason it is listed
+// separately: "^-" and "^Minus" are the same key, and a reader writing the
+// second should not have to know that the first is spelled without a dash.
+var modifierPrefixes = []string{"S-", "M-", "C-", "s-", "H-", "A-", "G-", "^"}
+
+// controlPrefixes are the two spellings of the Control modifier. They are one
+// modifier, not two, so "^-" and "C-Minus" name one key and a binding may use
+// whichever reads better where it is written.
+var controlPrefixes = []string{"^", "C-"}
+
+// isControlSpelling reports whether a key token names a Control chord, under
+// either spelling of the modifier.
+func isControlSpelling(key string) bool {
+	return strings.HasPrefix(key, "^") || strings.HasPrefix(key, "C-")
+}
+
+// prefixSpellings returns every way a stack of modifier prefixes can be
+// written, varying Control between its caret and letter forms. A remainder that
+// is not a known modifier is carried through verbatim rather than dropped.
+func prefixSpellings(prefix string) []string {
+	out := []string{""}
+	for prefix != "" {
+		comp := ""
+		for _, p := range modifierPrefixes {
+			if strings.HasPrefix(prefix, p) {
+				comp = p
+				break
+			}
+		}
+		if comp == "" {
+			for i := range out {
+				out[i] += prefix
+			}
+			return out
+		}
+		prefix = prefix[len(comp):]
+		variants := []string{comp}
+		if comp == "^" || comp == "C-" {
+			variants = controlPrefixes
+		}
+		next := make([]string, 0, len(out)*len(variants))
+		for _, sofar := range out {
+			for _, v := range variants {
+				next = append(next, sofar+v)
+			}
+		}
+		out = next
+	}
+	return out
+}
+
+// splitModifiers peels any stack of modifier prefixes off a key token and
+// returns them alongside the base name. A token that is nothing but modifiers
+// is left whole, so the base is never empty.
+func splitModifiers(token string) (prefix, base string) {
+	base = token
+	for {
+		matched := false
+		for _, p := range modifierPrefixes {
+			if len(base) > len(p) && strings.HasPrefix(base, p) {
+				prefix, base = prefix+p, base[len(p):]
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return prefix, base
+		}
+	}
+}
+
+// aliasSiblings returns the other spellings of one key token: its own alias
+// group, plus — for a modified key — the group of its base name with the
+// modifiers put back on. The token itself is not included.
+//
+// The modifier pass is what makes a *spelling* (as opposed to an equivalence
+// between two keys a decoder can both emit) earn its keep. A word like `minus`
+// exists because `-` is the modifier separator, so `M--` is awkward to read and
+// awkward to parse; a word that only resolved on a bare key would miss the very
+// case it was invented for. Peeling the prefix off and putting it back lets
+// `M-minus` and `M--` name one key, exactly as `minus` and `-` do.
+func (sp *Processor) aliasSiblings(token string) []string {
+	var out []string
+	add := func(s string) {
+		if s == token {
+			return
+		}
+		for _, e := range out {
+			if e == s {
+				return
+			}
+		}
+		out = append(out, s)
+	}
+	for _, sib := range sp.aliasGroupOf[token] {
+		add(sib)
+	}
+	if prefix, base := splitModifiers(token); prefix != "" {
+		bases := append([]string{base}, sp.aliasGroupOf[base]...)
+		for _, p := range prefixSpellings(prefix) {
+			for _, b := range bases {
+				add(p + b)
+			}
+		}
+	}
+	return out
 }
 
 // GetActiveSequence returns the current active sequence.
@@ -640,12 +767,6 @@ func (sp *Processor) getKeyFallbacks(sequence string) []string {
 		}
 	}
 
-	// Multi-part sequence handling: every part after the starter admits its
-	// equivalent spellings (see partVariants), combined across ALL parts at
-	// once — a continuation key must reach the mapping whichever spelling the
-	// map uses, even when several parts are aliased simultaneously ("^O ^V C"
-	// for a mapped "^O V ^C"). The as-pressed sequence enumerates first, so an
-	// exact mapping always wins over an alias.
 	// Every token admits its equivalent spellings, combined across ALL parts at
 	// once — a key must reach its mapping whichever spelling the map uses,
 	// wherever in the chord it sits and however many parts are aliased at the
@@ -685,11 +806,7 @@ func (sp *Processor) getKeyFallbacks(sequence string) []string {
 
 	// A single key has no parts loop above, so expand its group here.
 	if !strings.Contains(sequence, " ") {
-		for _, sib := range sp.aliasGroupOf[sequence] {
-			if sib != sequence {
-				fallbacks = append(fallbacks, sib)
-			}
-		}
+		fallbacks = append(fallbacks, sp.aliasSiblings(sequence)...)
 	}
 
 	return fallbacks
@@ -702,8 +819,8 @@ func (sp *Processor) getKeyFallbacks(sequence string) []string {
 // a named key with a control alias admits its plain letter in both cases
 // (^C ~ C ~ c, return ~ ^M ~ M ~ m). This is what lets "^B C" entered as
 // "^B ^C" complete the mapping mid-sequence instead of abandoning the prefix.
-// Named-key aliases (esc/^[, back/^H, ...) at the sequence tail are handled by
-// the alias suffix pass in getKeyFallbacks.
+// Alias-group spellings (esc/^[, minus/-, M-minus/M--) come from aliasSiblings
+// and apply at any position, in or out of a control chord.
 func (sp *Processor) partVariants(part string, controlSeq bool) []string {
 	out := []string{part}
 	add := func(s string) {
@@ -727,7 +844,7 @@ func (sp *Processor) partVariants(part string, controlSeq bool) []string {
 	// Alias-group siblings apply at ANY position and in any context: esc/^[ or
 	// minus/- name one key wherever they appear, unlike the control/case layer
 	// below, which is only meaningful for a continuation key.
-	for _, sib := range sp.aliasGroupOf[part] {
+	for _, sib := range sp.aliasSiblings(part) {
 		add(sib)
 	}
 	if controlSeq {
