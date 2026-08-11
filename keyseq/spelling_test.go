@@ -174,6 +174,48 @@ func TestBareCaretIsAKey(t *testing.T) {
 	}
 }
 
+// The first slot of a chord varies exactly as the others do. It used to be
+// registered from the bound spelling alone, so a chord bound on a letter could
+// only be opened in that case: the prefix was never held and the chord never
+// began, however the rest was typed.
+func TestStarterCaseFlips(t *testing.T) {
+	for _, c := range []struct {
+		bound string
+		keys  []string
+	}{
+		{"M x", []string{"m", "x"}},
+		{"m x", []string{"M", "x"}},
+		{"M x", []string{"m", "X"}}, // both slots at once
+		{"M N o", []string{"m", "n", "O"}},
+	} {
+		if got := bindAndPress(t, nil, c.bound, c.keys...); got != "TARGET" {
+			t.Errorf("bound %q, pressed %v -> %q, want TARGET", c.bound, c.keys, got)
+		}
+	}
+
+	// Exact still wins when a keymap spells both cases.
+	p := NewProcessor(nil)
+	p.SetMappings(map[string]string{"M x": "upper", "m x": "lower"})
+	p.ProcessKey("m")
+	if got := p.ProcessKey("x").Command; got != "lower" {
+		t.Errorf("pressed the lowercase starter, got %q, want its own binding", got)
+	}
+	p.ClearActiveSequence()
+	p.ProcessKey("M")
+	if got := p.ProcessKey("x").Command; got != "upper" {
+		t.Errorf("pressed the uppercase starter, got %q, want its own binding", got)
+	}
+
+	// A case-flipped starter is not a control starter, so the ladder stays off:
+	// "M ^M" still means a real Ctrl-M, opened in either case.
+	if got := bindAndPress(t, nil, "M ^M", "m", "^M"); got != "TARGET" {
+		t.Errorf("M ^M opened as m -> %q, want TARGET", got)
+	}
+	if got := bindAndPress(t, nil, "M ^M", "m", "M"); got == "TARGET" {
+		t.Error("a letter starter invented a control form for its continuation")
+	}
+}
+
 // A spelling is still a lookup, not a rewrite: naming the symbol directly wins
 // over the word, and the control ladder is untouched by the modifier pass.
 func TestSpellingsStayNonDestructive(t *testing.T) {

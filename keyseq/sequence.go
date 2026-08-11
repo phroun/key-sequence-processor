@@ -480,13 +480,16 @@ func (sp *Processor) updateSequenceStarters() {
 		firstPart := strings.Split(key, " ")[0]
 		control := isControlSpelling(firstPart)
 
-		// Every spelling of the starter opens the sequence, or a chord bound
-		// as "esc x" could not be typed with the Escape key's control form:
-		// the starter would not be held as a prefix and the chord would never
-		// begin. Control-ness follows the BOUND spelling, so an alias does not
-		// silently turn a named chord into a control one.
-		starters := append([]string{firstPart}, sp.aliasSiblings(firstPart)...)
-		for _, sp2 := range starters {
+		// Every spelling matching can produce for the first slot must open the
+		// sequence, or the chord never begins and the later slots never get
+		// their chance. partVariants is exactly that set, so registering from it
+		// keeps the two sides from drifting: a chord bound "M x" opens on "m"
+		// for the same reason its tail completes on either case, and one bound
+		// "esc x" opens on Escape's control form.
+		//
+		// Control-ness follows the BOUND spelling, so an alias cannot silently
+		// turn a named chord into a control one.
+		for _, sp2 := range sp.partVariants(firstPart, false) {
 			sp.sequenceStarters[sp2] = true
 			if control {
 				sp.controlSequenceStarters[sp2] = true
