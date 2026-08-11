@@ -533,12 +533,58 @@ func (sp *Processor) isControlStarter(key string) bool {
 // Control. The caret takes no separator, which is the whole reason it is listed
 // separately: "^-" and "^Minus" are the same key, and a reader writing the
 // second should not have to know that the first is spelled without a dash.
-var modifierPrefixes = []string{"S-", "M-", "C-", "s-", "H-", "A-", "G-", "^"}
+// Order matters only for matching the longest spelling first; the canonical
+// ORDER a stack is written in is modifierRank below.
+var modifierPrefixes = []string{"S-", "M-", "m-", "C-", "s-", "H-", "G-", "^"}
 
-// controlPrefixes are the two spellings of the Control modifier. They are one
-// modifier, not two, so "^-" and "C-Minus" name one key and a binding may use
-// whichever reads better where it is written.
-var controlPrefixes = []string{"^", "C-"}
+// modifierRank is the canonical order a stack of modifiers is written in. Two
+// keymaps that name the same chord in different orders name the same key, so
+// matching sorts the stack before comparing — order is not meaning.
+//
+// The sequence follows the order macOS renders modifiers (⌃⌥⇧⌘), extended with
+// the ones a terminal can report that a Mac keyboard has no cap for. Control's
+// caret form sorts LAST so it lands against the base key, which is where a
+// reader expects to find it: "M-S-^X", not "^M-S-X".
+var modifierRank = map[string]int{
+	"C-": 0, // Control
+	"G-": 1, // Glyph (AltGr / ISO_Level3_Shift; private)
+	"M-": 2, // Meta, as induced by the PC Alt key
+	"m-": 3, // Meta proper (the modifier a Space Cadet keyboard had its own key for)
+	"S-": 4, // Shift
+	"s-": 5, // Super / Command
+	"H-": 6, // Hyper
+	"^":  7, // Control again, hugging the base key
+}
+
+// prefixAliasGroups are modifier prefixes that reach each other. Two shapes
+// live here, and the difference is real even though the machinery is the same:
+//
+//   - "^" and "C-" are two SPELLINGS of one modifier. Nothing can tell them
+//     apart, because there is nothing to tell apart.
+//   - "M-" and "m-" are two DIFFERENT modifiers that fall back to each other.
+//     A terminal reports the PC Alt key and a true Meta key on separate bits,
+//     and most keyboards only have the first. Binding one catches either;
+//     binding both keeps them apart, since the spelling as pressed always
+//     enumerates first.
+//
+// There is no "A-". The PC Alt key induces Meta, and "M-" is what that is
+// called here — a separate Alt modifier would be a distinction no keyboard in
+// this vocabulary can make.
+var prefixAliasGroups = [][]string{
+	{"^", "C-"},
+	{"M-", "m-"},
+}
+
+// prefixSiblings maps each modifier spelling to its whole group.
+var prefixSiblings = func() map[string][]string {
+	m := make(map[string][]string)
+	for _, g := range prefixAliasGroups {
+		for _, p := range g {
+			m[p] = g
+		}
+	}
+	return m
+}()
 
 // isControlSpelling reports whether a key token names a Control chord, under
 // either spelling of the modifier.
@@ -553,11 +599,10 @@ func isControlSpelling(key string) bool {
 		(strings.HasPrefix(key, "C-") && len(key) > 2)
 }
 
-// prefixSpellings returns every way a stack of modifier prefixes can be
-// written, varying Control between its caret and letter forms. A remainder that
-// is not a known modifier is carried through verbatim rather than dropped.
-func prefixSpellings(prefix string) []string {
-	out := []string{""}
+// splitModifierStack breaks a modifier prefix into its component spellings.
+// A remainder that is not a known modifier comes back as the trailing rest,
+// carried through verbatim rather than dropped.
+func splitModifierStack(prefix string) (mods []string, rest string) {
 	for prefix != "" {
 		comp := ""
 		for _, p := range modifierPrefixes {
@@ -567,23 +612,92 @@ func prefixSpellings(prefix string) []string {
 			}
 		}
 		if comp == "" {
-			for i := range out {
-				out[i] += prefix
-			}
-			return out
+			return mods, prefix
 		}
+		mods = append(mods, comp)
 		prefix = prefix[len(comp):]
-		variants := []string{comp}
-		if comp == "^" || comp == "C-" {
-			variants = controlPrefixes
+	}
+	return mods, ""
+}
+
+// canonicalizeStack sorts a stack of modifier spellings into modifierRank
+// order. The sort is stable, so two spellings that share a rank (M- and its
+// A- alias) keep the order they were written in rather than swapping.
+func canonicalizeStack(mods []string) []string {
+	out := append([]string(nil), mods...)
+	sort.SliceStable(out, func(i, j int) bool {
+		return modifierRank[out[i]] < modifierRank[out[j]]
+	})
+	return out
+}
+
+// permuteStack returns every ordering of a modifier stack, canonical order
+// first so it is preferred among the fallbacks.
+func permuteStack(mods []string) [][]string {
+	var out [][]string
+	var walk func(cur, rest []string)
+	walk = func(cur, rest []string) {
+		if len(rest) == 0 {
+			out = append(out, append([]string(nil), cur...))
+			return
 		}
-		next := make([]string, 0, len(out)*len(variants))
-		for _, sofar := range out {
-			for _, v := range variants {
-				next = append(next, sofar+v)
+		for i := range rest {
+			next := make([]string, 0, len(rest)-1)
+			next = append(next, rest[:i]...)
+			next = append(next, rest[i+1:]...)
+			walk(append(cur, rest[i]), next)
+		}
+	}
+	walk(nil, canonicalizeStack(mods))
+	return out
+}
+
+// prefixSpellings returns every way a stack of modifier prefixes can be
+// written: each component varied across its alias group, and the whole stack
+// put in canonical order. Order is not meaning, so a keymap that writes
+// "S-C-Up" is naming the same key as one that writes "C-S-Up".
+func prefixSpellings(prefix string) []string {
+	mods, rest := splitModifierStack(prefix)
+	if len(mods) == 0 {
+		return []string{prefix}
+	}
+	// Order is not meaning, and the keymap may have written its order either
+	// way round, so every ordering has to be reachable — canonicalizing only
+	// the pressed side would still miss a binding spelled "S-C-Up". Real chords
+	// stack one to three deep; beyond that only the as-written and canonical
+	// orders are generated, which keeps a pathological stack from exploding.
+	stacks := [][]string{mods}
+	if len(mods) > 1 && len(mods) <= 3 {
+		stacks = permuteStack(mods)
+	} else if len(mods) > 3 {
+		stacks = append(stacks, canonicalizeStack(mods))
+	}
+	seen := make(map[string]bool)
+	out := []string{}
+	for _, stack := range stacks {
+		combos := []string{""}
+		for _, comp := range stack {
+			variants := prefixSiblings[comp]
+			if len(variants) == 0 {
+				variants = []string{comp}
+			}
+			next := make([]string, 0, len(combos)*len(variants))
+			for _, sofar := range combos {
+				for _, v := range variants {
+					next = append(next, sofar+v)
+				}
+			}
+			combos = next
+			if len(combos) > 64 {
+				combos = combos[:64] // runaway guard; real chords stack 1-3 deep
 			}
 		}
-		out = next
+		for _, c := range combos {
+			if s := c + rest; !seen[s] {
+				seen[s] = true
+				out = append(out, s)
+			}
+		}
 	}
 	return out
 }

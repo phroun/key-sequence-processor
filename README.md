@@ -186,6 +186,38 @@ p.SetAliasGroups([]keyseq.AliasGroup{
 
 Pass `nil` to drop aliasing entirely.
 
+## Modifiers
+
+| Prefix | Modifier |
+|--------|----------|
+| `C-`, `^` | Control — two spellings of one modifier |
+| `G-` | Glyph (AltGr / ISO_Level3_Shift; a private kitty bit) |
+| `M-` | Meta, as induced by the PC Alt key |
+| `m-` | Meta proper — the key a Space Cadet keyboard had its own cap for |
+| `S-` | Shift |
+| `s-` | Super / Command |
+| `H-` | Hyper |
+
+**Order is not meaning.** A keymap that writes `S-C-Up` names the same key as
+one that writes `C-S-Up`, and either spelling of the press finds either
+spelling of the binding. This matters because input layers disagree: one
+composes `S-M-Left`, another `M-S-Left`, for the same chord. A keymap should
+not inherit that argument.
+
+The canonical order is the order above — which is the order macOS renders
+modifiers (⌃⌥⇧⌘), extended with the ones a Mac keyboard has no cap for.
+Control's caret form sorts last so it lands against the base key: `M-S-^X`,
+not `^M-S-X`.
+
+`M-` and `m-` are two *different* modifiers that fall back to each other, the
+same shape as `^H`/`Backspace`: bind one and either reaches it, bind both and
+they stay apart. Most keyboards only produce the first. `^` and `C-`, by
+contrast, are one modifier under two spellings — there is nothing there to tell
+apart.
+
+There is **no `A-`**. The PC Alt key induces Meta, and `M-` is what that is
+called here.
+
 ## The Option-character layer
 
 A terminal forces an either/or: Option is Meta, or Option types characters —
@@ -250,6 +282,14 @@ MIT — see [LICENSE](LICENSE).
 
 ### 0.1.3
 
+- **Modifier order no longer matters.** `S-C-Up` and `C-S-Up` name one key, in
+  bindings and in presses alike. Matching compared whole tokens before, so the
+  two were unrelated strings — while the input layers composing them disagreed
+  about the order, which made the keymap inherit the argument.
+- Added `H-` (Hyper) and `m-` (Meta proper, distinct from the Alt-induced `M-`)
+  as first-class modifiers. `m-` falls back to `M-` unless a keymap names both.
+- Modifier prefixes have a canonical order — `C- G- M- m- S- s- H- ^` — and
+  `A-` is gone: the PC Alt key induces Meta, spelled `M-`.
 - Added the named keys' conventional abbreviations to the defaults: `Esc`,
   `PgUp`, `PgDn`/`PgDown`, `Ins`, `PrtSc`. `Delete` is deliberately left
   without one — see above.
