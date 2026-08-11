@@ -126,7 +126,7 @@ spellings a binding may use.
 | `Backspace` | `^H`, `^8` | `^H` is BS (8); `^8` is DEL (127), which arrives as Backspace |
 | `Tab` | `^I` | one byte (9) for both |
 | `Return` | `^M` | one byte (13) for both |
-| `Escape` | `^[`, `^3` | one byte (27); `^3` is how a keyboard makes it with a digit |
+| `Escape` | `^[`, `^3`, `Esc` | one byte (27); `^3` is how a keyboard makes it with a digit |
 | `^@` | `^2`, `^space` | NUL, also Ctrl+Space |
 | `^\` | `^4` | FS |
 | `^]` | `^5` | GS |
@@ -158,6 +158,16 @@ depends on this for `space`, which cannot be spelled literally at all.)
 | `"` | `Quote` | | \| | `Pipe` |
 | `~` | `Tilde`, `Wave` | | | |
 | `` ` `` | `Backtick` | | | |
+
+The named keys carry their conventional abbreviations too — `Esc`, `PgUp`,
+`PgDn`/`PgDown`, `Ins`, `PrtSc`.
+
+`Delete` has **no** abbreviation, deliberately. `Del` and `Delete` are not one
+key under two names: on a PC, `Del` is forward delete, while the key a Mac
+labels *delete* is Backspace. Folding them would silently bind the wrong key on
+one platform or the other — the one place here where the short form means
+something different from the word it shortens. An application that wants an
+abbreviation declares which key it means.
 
 Spellings resolve through modifiers, not just on a bare key: the prefix stack is
 peeled off, the base varied, and the prefix put back, so `M-Minus` and `M--`
@@ -237,6 +247,12 @@ MIT — see [LICENSE](LICENSE).
   aliased to each other.
 - **Upgrading:** an application whose key names differ from the defaults must
   now declare its own groups; previously one editor's were assumed.
+
+### 0.1.3
+
+- Added the named keys' conventional abbreviations to the defaults: `Esc`,
+  `PgUp`, `PgDn`/`PgDown`, `Ins`, `PrtSc`. `Delete` is deliberately left
+  without one — see above.
 
 ### 0.1.2
 

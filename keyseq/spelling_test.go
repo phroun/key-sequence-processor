@@ -216,6 +216,55 @@ func TestStarterCaseFlips(t *testing.T) {
 	}
 }
 
+// The named keys carry their conventional abbreviations, which is what a user
+// writing a keymap actually reaches for.
+func TestNamedKeyAbbreviations(t *testing.T) {
+	cases := []struct{ short, long string }{
+		{"Esc", "Escape"},
+		{"PgUp", "PageUp"},
+		{"PgDn", "PageDown"},
+		{"PgDown", "PageDown"},
+		{"Ins", "Insert"},
+		{"PrtSc", "PrintScreen"},
+	}
+	for _, c := range cases {
+		if got := bindAndPress(t, nil, c.long, c.short); got != "TARGET" {
+			t.Errorf("bound %q, pressed %q -> %q, want TARGET", c.long, c.short, got)
+		}
+		if got := bindAndPress(t, nil, c.short, c.long); got != "TARGET" {
+			t.Errorf("bound %q, pressed %q -> %q, want TARGET", c.short, c.long, got)
+		}
+	}
+	// Through modifiers and in a chord, like every other spelling.
+	if got := bindAndPress(t, nil, "M-PgUp", "M-PageUp"); got != "TARGET" {
+		t.Errorf("M-PgUp <- M-PageUp -> %q, want TARGET", got)
+	}
+	if got := bindAndPress(t, nil, "^K Esc", "^K", "Escape"); got != "TARGET" {
+		t.Errorf("^K Esc <- ^K Escape -> %q, want TARGET", got)
+	}
+	// Esc joins Escape's existing group, so it reaches the control forms too.
+	if got := bindAndPress(t, nil, "Esc", "^["); got != "TARGET" {
+		t.Errorf("Esc <- ^[ -> %q, want TARGET", got)
+	}
+}
+
+// Del and Delete are NOT aliased. A PC's Del is forward delete; the key a Mac
+// labels "delete" is Backspace. Folding them would bind the wrong key on one
+// platform or the other, so an application that wants an abbreviation here
+// declares which one it means.
+func TestDeleteIsNotAbbreviated(t *testing.T) {
+	if got := bindAndPress(t, nil, "Delete", "Del"); got == "TARGET" {
+		t.Error("Del matched a Delete binding; the two mean different keys on different keyboards")
+	}
+	if got := bindAndPress(t, nil, "Del", "Delete"); got == "TARGET" {
+		t.Error("Delete matched a Del binding")
+	}
+	// Nor does either reach Backspace by default.
+	if got := bindAndPress(t, nil, "Backspace", "Delete"); got == "TARGET" {
+		t.Error("Delete matched a Backspace binding")
+	}
+}
+
 // A spelling is still a lookup, not a rewrite: naming the symbol directly wins
 // over the word, and the control ladder is untouched by the modifier pass.
 func TestSpellingsStayNonDestructive(t *testing.T) {

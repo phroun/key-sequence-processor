@@ -179,7 +179,7 @@ func DefaultAliasGroups() []AliasGroup {
 		{"Backspace", "^H", "^8"}, // ^8 is DEL (127), which arrives as Backspace
 		{"Tab", "^I"},
 		{"Return", "^M"},
-		{"Escape", "^[", "^3"},
+		{"Escape", "^[", "^3", "Esc"},
 
 		// Control-number spellings for the control characters that have no
 		// letter: a keyboard produces these with Ctrl and a digit.
@@ -208,6 +208,21 @@ func DefaultAliasGroups() []AliasGroup {
 		{";", "Semicolon"},
 		{":", "Colon"},
 		{"|", "Pipe"},
+
+		// Short spellings for the named keys, which are what a user reaches for
+		// when writing a keymap. Spellings again, not equivalences: nothing
+		// emits "PgUp", so there is no distinction to lose. (Escape's "Esc" is
+		// in its group above, where the control forms already live.)
+		//
+		// Delete is deliberately absent. Del and Delete are not one key under
+		// two names: on a PC, Del is forward delete, while the key a Mac labels
+		// "delete" is Backspace. Folding them would silently bind the wrong key
+		// on one platform or the other — the one case here where an abbreviation
+		// means something different from the word it abbreviates.
+		{"PageUp", "PgUp"},
+		{"PageDown", "PgDn", "PgDown"},
+		{"Insert", "Ins"},
+		{"PrintScreen", "PrtSc"},
 	}
 }
 
