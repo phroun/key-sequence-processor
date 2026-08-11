@@ -156,8 +156,16 @@ depends on this for `space`, which cannot be spelled literally at all.)
 | `=` | `Equals` | | `;` | `Semicolon` |
 | `'` | `Apos` | | `:` | `Colon` |
 | `"` | `Quote` | | \| | `Pipe` |
-| `~` | `Tilde`, `Wave` | | | |
-| `` ` `` | `Backtick` | | | |
+| `~` | `Tilde`, `Wave` | | `,` | `Comma` |
+| `` ` `` | `Backtick` | | `.` | `Period`, `Dot` |
+| | | | `#` | `Octothorpe` |
+
+For four of these the word is not a convenience but the **only way in**. A
+keymap usually lives in a config file, and that file's own metacharacters are
+exactly the keys that cannot appear literally on the left of a binding: a line
+starting with `;` or `#` is a comment, `=` separates key from command, and a
+comma reads as a list separator. `Semicolon`, `Octothorpe`, `Equals` and
+`Comma` are how those keys get bound at all.
 
 The named keys carry their conventional abbreviations too — `Esc`, `PgUp`,
 `PgDn`/`PgDown`, `Ins`, `PrtSc`.
@@ -290,6 +298,10 @@ MIT — see [LICENSE](LICENSE).
   as first-class modifiers. `m-` falls back to `M-` unless a keymap names both.
 - Modifier prefixes have a canonical order — `C- G- M- m- S- s- H- ^` — and
   `A-` is gone: the PC Alt key induces Meta, spelled `M-`.
+- Added `Comma`, `Period`/`Dot` and `Octothorpe` to the punctuation spellings.
+  Together with `Semicolon` and `Equals` these are what make a config file's own
+  metacharacters bindable at all — `;` and `#` start comments, `=` separates key
+  from command, and a comma reads as a list separator.
 - Added the named keys' conventional abbreviations to the defaults: `Esc`,
   `PgUp`, `PgDn`/`PgDown`, `Ins`, `PrtSc`. `Delete` is deliberately left
   without one — see above.

@@ -25,6 +25,7 @@ func TestDefaultSpellingsResolveBareKeys(t *testing.T) {
 		{"Apos", "'"}, {"Quote", "\""}, {"Tilde", "~"}, {"Wave", "~"},
 		{"Backtick", "`"}, {"Backslash", "\\"}, {"Slash", "/"},
 		{"Semicolon", ";"}, {"Colon", ":"}, {"Pipe", "|"},
+		{"Comma", ","}, {"Period", "."}, {"Dot", "."}, {"Octothorpe", "#"},
 	}
 	for _, c := range cases {
 		if got := bindAndPress(t, nil, c.word, c.symbol); got != "TARGET" {
@@ -262,6 +263,28 @@ func TestDeleteIsNotAbbreviated(t *testing.T) {
 	// Nor does either reach Backspace by default.
 	if got := bindAndPress(t, nil, "Backspace", "Delete"); got == "TARGET" {
 		t.Error("Delete matched a Backspace binding")
+	}
+}
+
+// For some keys the word is the ONLY way in. A keymap usually lives in a
+// config file, and that file's own metacharacters are exactly the keys that
+// cannot appear literally on the left of a binding — a line starting with ";"
+// or "#" is a comment, "=" separates key from command, and a comma reads as a
+// list separator. Without these spellings those four keys are unbindable.
+func TestConfigMetacharactersAreSpellable(t *testing.T) {
+	for _, c := range []struct{ word, symbol string }{
+		{"Semicolon", ";"},
+		{"Octothorpe", "#"},
+		{"Equals", "="},
+		{"Comma", ","},
+	} {
+		if got := bindAndPress(t, nil, c.word, c.symbol); got != "TARGET" {
+			t.Errorf("bound %q, pressed %q -> %q, want TARGET", c.word, c.symbol, got)
+		}
+		// And under a modifier, which is where they most often appear.
+		if got := bindAndPress(t, nil, "M-"+c.word, "M-"+c.symbol); got != "TARGET" {
+			t.Errorf("bound M-%s, pressed M-%s -> %q, want TARGET", c.word, c.symbol, got)
+		}
 	}
 }
 

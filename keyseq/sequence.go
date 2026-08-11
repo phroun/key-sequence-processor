@@ -196,6 +196,14 @@ func DefaultAliasGroups() []AliasGroup {
 		// "M-Minus" says the same thing plainly. (The processor already relies
 		// on this for the spacebar, which cannot be spelled literally at all,
 		// since a key name may not contain a space.)
+		//
+		// For some of these the word is not a convenience but the only way in.
+		// A keymap is usually written in a config file, and a config file's own
+		// metacharacters are exactly the keys that cannot be spelled literally
+		// on the left of a binding: a line starting with ";" or "#" is a
+		// comment, "=" separates key from command, and a comma reads as a list.
+		// Semicolon, Octothorpe, Equals and Comma are how those keys get bound
+		// at all.
 		{"-", "Minus"},
 		{"+", "Plus"},
 		{"=", "Equals"},
@@ -208,6 +216,9 @@ func DefaultAliasGroups() []AliasGroup {
 		{";", "Semicolon"},
 		{":", "Colon"},
 		{"|", "Pipe"},
+		{",", "Comma"},
+		{".", "Period", "Dot"},
+		{"#", "Octothorpe"},
 
 		// Short spellings for the named keys, which are what a user reaches for
 		// when writing a keymap. Spellings again, not equivalences: nothing
