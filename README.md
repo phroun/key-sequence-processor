@@ -238,3 +238,13 @@ MIT — see [LICENSE](LICENSE).
 - Fixed: a bare `^` is the caret character and is mappable as one. It was read
   as a control chord, which switched the control/case ladder on for whatever
   followed it, so a sequence bound `^ M` also answered to caret then Ctrl-M.
+- Fixed: the first key of a chord now varies exactly as the others do. A chord
+  bound `M x` could not be opened with a lowercase `m` — the prefix was never
+  held, so the tail's case-insensitivity was unreachable. Only single-letter
+  starters are affected.
+
+**Note on letter starters:** binding a chord whose first key is an ordinary
+character makes that character a prefix, so typing it waits for the next key
+and an abandoned chord discards both. That has always been true of the bound
+spelling; it now applies to the other case as well. Control keys and named
+keys (`^K`, `esc`) are the ordinary choice for a reason.
