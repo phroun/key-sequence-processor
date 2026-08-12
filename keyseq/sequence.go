@@ -743,6 +743,12 @@ func splitModifiers(token string) (prefix, base string) {
 // awkward to parse; a word that only resolved on a bare key would miss the very
 // case it was invented for. Peeling the prefix off and putting it back lets
 // `M-minus` and `M--` name one key, exactly as `minus` and `-` do.
+//
+// A letter's CASE rides along the same pass. Case is not part of which key a
+// letter is — `M` and `m` are one keystroke, and hanging a modifier off it
+// does not change that — so `s-M` and `s-m` name one key too. They differ only
+// when BOTH are bound, which needs no rule here: the sequence as pressed is
+// tried before any alias, so an exact binding always wins.
 func (sp *Processor) aliasSiblings(token string) []string {
 	var out []string
 	add := func(s string) {
@@ -761,6 +767,15 @@ func (sp *Processor) aliasSiblings(token string) []string {
 	}
 	if prefix, base := splitModifiers(token); prefix != "" {
 		bases := append([]string{base}, sp.aliasGroupOf[base]...)
+		// The case flip is a base spelling like any other, so it goes through
+		// the same prefix pass. That is also what lets the two spellings of
+		// Control meet: the caret form writes its letter uppercase, so `C-q`
+		// only reaches a bound `^Q` if the flip and the prefix are applied
+		// together.
+		if flip := caseFlip(base); flip != "" {
+			bases = append(bases, flip)
+			bases = append(bases, sp.aliasGroupOf[flip]...)
+		}
 		for _, p := range prefixSpellings(prefix) {
 			for _, b := range bases {
 				add(p + b)
@@ -768,6 +783,21 @@ func (sp *Processor) aliasSiblings(token string) []string {
 		}
 	}
 	return out
+}
+
+// caseFlip returns a single letter with its case swapped, or "" for anything
+// that is not one letter. Named keys and punctuation have no case to flip:
+// `Enter` is a name, not a letter, and upper-casing it would invent a spelling
+// nobody wrote.
+func caseFlip(base string) string {
+	r := []rune(base)
+	if len(r) != 1 || !unicode.IsLetter(r[0]) {
+		return ""
+	}
+	if unicode.IsUpper(r[0]) {
+		return strings.ToLower(base)
+	}
+	return strings.ToUpper(base)
 }
 
 // GetActiveSequence returns the current active sequence.
