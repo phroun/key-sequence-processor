@@ -78,16 +78,16 @@ type candidate struct {
 // with disambiguation for sequences that could be prefixes of longer
 // sequences.
 //
-// Bindings carry a precedence LEVEL, written as leading "capture" (+1) /
-// "override" (+2) words on the mapping key — `capture * = tinput_key` — and
-// resolution runs from the highest level down:
+// Bindings carry a precedence LEVEL, written as parenthesized "(capture)" (+1)
+// / "(override)" (+2) words on the mapping key — `(capture) * = tinput_key` —
+// and resolution runs from the highest level down:
 //
 //  1. The longest live sequence possibility wins, across all levels: a key
 //     that could begin (or extend) a mapped sequence is held, wildcards
 //     notwithstanding. Nothing single-key outranks a chord in progress.
 //  2. Among matches of equal length, the highest level is considered first.
 //  3. Within a level, a specific binding SHADOWS the wildcard — each level
-//     contributes at most one candidate, so `capture ^C = false` really does
+//     contributes at most one candidate, so `(capture) ^C = false` really does
 //     drop ^C past the whole capture level, not into its own wildcard.
 //  4. A candidate declining (clean false status) drops consideration one
 //     level and re-runs. Exhausted candidates fall to the default handling
@@ -96,7 +96,7 @@ type candidate struct {
 //     is RELEASED (offered to the wildcards, then its literal self), and the
 //     rest replay as ordinary keys.
 type Processor struct {
-	// rawMap holds bindings exactly as configured, level prefixes included.
+	// rawMap holds bindings exactly as configured, level words included.
 	// It is the API surface (MapKey/GetMapping/GetAllMappings) so config
 	// merging and provenance see the same spellings the user wrote; the
 	// parsed view below is derived from it.
@@ -274,31 +274,61 @@ func (sp *Processor) applyAliasGroups(groups []AliasGroup) {
 }
 
 // parseRawKey splits a raw mapping key into its precedence level and the
-// physical key sequence. Each leading "capture" word adds 1 and each
-// "override" adds 2; they compound, so "capture capture ^C" sits at level 2
-// and a user can always outbid a layer by writing one more word. The
-// remainder is the sequence; a remainder of exactly "*" is that level's
+// physical key sequence.
+//
+// Everything a mapping key says ABOUT itself is written in parentheses, and
+// everything else is keys you press. "(capture)" adds one level and
+// "(override)" adds two; they compound, so "(capture) (capture) ^C" sits at
+// level 2 and a layer can always outbid another by writing one more word. What
+// remains is the sequence; a remainder of exactly "*" is that level's
 // single-key wildcard.
+//
+// The words may appear ANYWHERE in the key — "^C (capture)" and "(capture) ^C"
+// are the same binding — because a level is a property of the binding rather
+// than a position in it.
+//
+// A parenthesized token this processor does not recognize is SKIPPED, not read
+// as a key, and that is the point of the notation rather than an oversight. An
+// application layered over this one writes its own metadata in the same
+// parentheses — which platform a binding is for, say — and each reader takes
+// the words it knows and passes over the rest. Bare words could not do that: a
+// reader that had never heard of "capture" would have no way to tell it from
+// the name of a key, and would quietly bind a key nobody can press.
+//
+// A parenthesis is itself a pressable key, so only a WHOLE token of the form
+// "(word)" is metadata: "(", ")", "()" and "^(" are keys like any other.
 func parseRawKey(raw string) (level int, seq string) {
-	tokens := strings.Fields(raw)
-	for i := 0; i < len(tokens); i++ {
-		switch tokens[i] {
+	var keys []string
+	for _, tok := range strings.Fields(raw) {
+		switch metaWord(tok) {
+		case "":
+			keys = append(keys, tok)
 		case "capture":
 			level++
-			continue
 		case "override":
 			level += 2
-			continue
 		}
-		return level, strings.Join(tokens[i:], " ")
 	}
-	// Nothing but prefix words: someone bound the literal word. Treat the
-	// whole raw string as a level-0 key rather than losing it.
-	return 0, raw
+	if len(keys) == 0 {
+		// Metadata and nothing to press. Rather than bind the empty key, keep
+		// the line as it was written and let it be the dead binding it is.
+		return 0, raw
+	}
+	return level, strings.Join(keys, " ")
+}
+
+// metaWord returns the word inside a whole parenthesized metadata token, or ""
+// for a token that is a key. "()" is a key: a metadata token has something
+// between its parentheses.
+func metaWord(tok string) string {
+	if len(tok) > 2 && tok[0] == '(' && tok[len(tok)-1] == ')' {
+		return tok[1 : len(tok)-1]
+	}
+	return ""
 }
 
 // DisplayKey returns the physical key sequence a raw mapping key names, with
-// any capture/override level prefix stripped — the spelling to SHOW a user,
+// any (capture)/(override) level word stripped — the spelling to SHOW a user,
 // since the keys they press are the same at every level. Reports false for a
 // wildcard binding, which names no pressable key at all.
 func DisplayKey(raw string) (string, bool) {
@@ -317,7 +347,7 @@ func (sp *Processor) rebuild() {
 	sp.allKeys = make(map[string]bool)
 
 	// Deterministic on duplicate (level, sequence) pairs spelled differently
-	// ("capture capture X" vs "override X"): process raw keys in sorted
+	// ("(capture) (capture) X" vs "(override) X"): process raw keys in sorted
 	// order, so the lexicographically-last spelling wins, every time.
 	raws := make([]string, 0, len(sp.rawMap))
 	for raw := range sp.rawMap {
@@ -355,7 +385,7 @@ func (sp *Processor) rebuild() {
 // STARTER a higher level claims BY NAME, which is the one exception to rule 1.
 //
 // Naming a key at a capture level is a claim on the key itself, not on "the
-// key unless something below happens to build a chord out of it": `capture esc
+// key unless something below happens to build a chord out of it": `(capture) esc
 // = tinput_key` in a terminal's keymap means Escape belongs to the child, and
 // it would read very strangely for a lower level's esc-chords to quietly
 // outrank it. So
@@ -364,7 +394,7 @@ func (sp *Processor) rebuild() {
 //
 // The WILDCARD deliberately does not suppress. It is a level's answer for the
 // keys it did not name — the "everything else" net — and if it suppressed,
-// `capture *` would silently kill ^B N and every other chord the moment a
+// `(capture) *` would silently kill ^B N and every other chord the moment a
 // terminal took focus. Rule 1 keeps chords intact under the wildcard; only an
 // explicit name overrides them.
 //
@@ -415,7 +445,7 @@ func (sp *Processor) UnmapKey(keySequence string) {
 }
 
 // GetMapping returns the command mapped to a key sequence (in its raw
-// spelling, level prefix included), or empty string if not found.
+// spelling, level words included), or empty string if not found.
 func (sp *Processor) GetMapping(keySequence string) string {
 	return sp.rawMap[keySequence]
 }
@@ -482,7 +512,7 @@ func (sp *Processor) SetMappings(m map[string]string) {
 }
 
 // GetAllMappings returns a copy of all key mappings, keyed by their raw
-// spellings (level prefixes included — see DisplayKey for the user-facing
+// spellings (level words included — see DisplayKey for the user-facing
 // form).
 func (sp *Processor) GetAllMappings() map[string]string {
 	result := make(map[string]string, len(sp.rawMap))
@@ -493,7 +523,7 @@ func (sp *Processor) GetAllMappings() map[string]string {
 }
 
 // updateSequenceStarters rebuilds the set of sequence starters from the
-// parsed keymap. Starters are drawn from every level: a "capture ^B N" makes
+// parsed keymap. Starters are drawn from every level: a "(capture) ^B N" makes
 // ^B a starter exactly as a level-0 "^B N" does.
 func (sp *Processor) updateSequenceStarters() {
 	sp.sequenceStarters = make(map[string]bool)
@@ -845,7 +875,7 @@ func (sp *Processor) ProcessKey(key string) ProcessResult {
 // resolveKeyEvent runs one ordinary key (no sequence in play) through the
 // level stack: candidates from the highest level down, then the default
 // handling floor. The floor is load-bearing for the reclaim idiom — a
-// `capture ^C = false` declines the capture so ^C falls through the levels
+// `(capture) ^C = false` declines the capture so ^C falls through the levels
 // and lands exactly where an uncaptured ^C always landed.
 func (sp *Processor) resolveKeyEvent(key string) ProcessResult {
 	cands := sp.getCandidates(key)
@@ -868,7 +898,7 @@ func (sp *Processor) resolveKeyEvent(key string) ProcessResult {
 // getCandidates builds the precedence-ordered claims on a key event: one
 // candidate per level, highest level first. Within a level the specific
 // binding SHADOWS the wildcard — the wildcard is a level's answer only for
-// the keys that level does not name — so declining a specific `capture ^C`
+// the keys that level does not name — so declining a specific `(capture) ^C`
 // drops past the capture level entirely rather than into its own net.
 // Wildcards claim single keys only; sequences are always named.
 func (sp *Processor) getCandidates(seq string) []candidate {
@@ -1226,7 +1256,7 @@ func (sp *Processor) handleKeyWithActiveSequence(key string) ProcessResult {
 // it does not re-enter sequence consideration and its own specific bindings
 // (which lost to the sequence the moment it was held) do not fire. The
 // wildcards get first refusal, highest level down: for a hosted terminal that
-// is `capture * = tinput_key`, sending the starter to the child as-is. Failing
+// is `(capture) * = tinput_key`, sending the starter to the child as-is. Failing
 // those it falls to the default handler, exactly as an unbound key would.
 func (sp *Processor) releaseKey(key string) {
 	if sp.executor != nil {

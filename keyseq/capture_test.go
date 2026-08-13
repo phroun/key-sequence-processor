@@ -53,8 +53,8 @@ func newCaptureSP(mappings map[string]string, decline ...string) (*Processor, *c
 // bound. Up is bound at level 0, captured at level 1 — the terminal wins.
 func TestCaptureLevelOutranksABoundKey(t *testing.T) {
 	sp, h := newCaptureSP(map[string]string{
-		"up":        "go_line_prior",
-		"capture *": "tinput_key",
+		"up":          "go_line_prior",
+		"(capture) *": "tinput_key",
 	})
 	sp.ProcessKey("up")
 	if want := []string{"up→tinput_key"}; !reflect.DeepEqual(h.calls, want) {
@@ -66,8 +66,8 @@ func TestCaptureLevelOutranksABoundKey(t *testing.T) {
 // wildcard, and the key lands exactly where it always did.
 func TestDecliningDescendsToTheLevelBelow(t *testing.T) {
 	sp, h := newCaptureSP(map[string]string{
-		"up":        "go_line_prior",
-		"capture *": "tinput_key",
+		"up":          "go_line_prior",
+		"(capture) *": "tinput_key",
 	}, "tinput_key")
 	sp.ProcessKey("up")
 	want := []string{"up→tinput_key", "up→go_line_prior"}
@@ -80,8 +80,8 @@ func TestDecliningDescendsToTheLevelBelow(t *testing.T) {
 // level's answer only for keys the level does not name.
 func TestSpecificShadowsTheWildcardWithinALevel(t *testing.T) {
 	sp, h := newCaptureSP(map[string]string{
-		"capture del": `tinput "\x08"`,
-		"capture *":   "tinput_key",
+		"(capture) del": `tinput "\x08"`,
+		"(capture) *":   "tinput_key",
 	})
 	sp.ProcessKey("del")
 	if want := []string{`del→tinput "\x08"`}; !reflect.DeepEqual(h.calls, want) {
@@ -94,9 +94,9 @@ func TestSpecificShadowsTheWildcardWithinALevel(t *testing.T) {
 // the key on the way down — so it lands at the layers below.
 func TestReclaimSkipsTheCapturingLevelEntirely(t *testing.T) {
 	sp, h := newCaptureSP(map[string]string{
-		"capture ^C": "false",
-		"capture *":  "tinput_key",
-		"^C":         "viewport_close",
+		"(capture) ^C": "false",
+		"(capture) *":  "tinput_key",
+		"^C":           "viewport_close",
 	}, "false")
 	sp.ProcessKey("^C")
 	want := []string{"^C→false", "^C→viewport_close"}
@@ -109,8 +109,8 @@ func TestReclaimSkipsTheCapturingLevelEntirely(t *testing.T) {
 // squelches every layer below.
 func TestCaptureTrueSquelchesTheLevelsBelow(t *testing.T) {
 	sp, h := newCaptureSP(map[string]string{
-		"capture ^C": "true",
-		"^C":         "viewport_close",
+		"(capture) ^C": "true",
+		"^C":           "viewport_close",
 	})
 	sp.ProcessKey("^C")
 	if want := []string{"^C→true"}; !reflect.DeepEqual(h.calls, want) {
@@ -123,8 +123,8 @@ func TestCaptureTrueSquelchesTheLevelsBelow(t *testing.T) {
 // sequence at level 0.
 func TestSequenceInProgressOutranksTheWildcard(t *testing.T) {
 	sp, h := newCaptureSP(map[string]string{
-		"^B N":      "buffer_next",
-		"capture *": "tinput_key",
+		"^B N":        "buffer_next",
+		"(capture) *": "tinput_key",
 	})
 	sp.ProcessKey("^B")
 	if len(h.calls) != 0 {
@@ -144,8 +144,8 @@ func TestSequenceInProgressOutranksTheWildcard(t *testing.T) {
 // an ordinary key — which the wildcard also takes.
 func TestUnwindReleasesTheStarterToTheCapture(t *testing.T) {
 	sp, h := newCaptureSP(map[string]string{
-		"^B N":      "buffer_next",
-		"capture *": "tinput_key",
+		"^B N":        "buffer_next",
+		"(capture) *": "tinput_key",
 	})
 	sp.ProcessKey("^B")
 	sp.ProcessKey("q")
@@ -186,7 +186,7 @@ func TestADeclinedSequenceDoesNotUnwind(t *testing.T) {
 // reclaim: a declined ^C must land on its classic cancel|viewport_close.
 func TestTheFloorRunsWhenEveryLevelDeclines(t *testing.T) {
 	sp, h := newCaptureSP(map[string]string{
-		"capture *": "tinput_key",
+		"(capture) *": "tinput_key",
 	}, "tinput_key")
 	sp.ProcessKey("x")
 	want := []string{"x→tinput_key", "x→insert 'x'"}
@@ -195,12 +195,12 @@ func TestTheFloorRunsWhenEveryLevelDeclines(t *testing.T) {
 	}
 }
 
-// Compounding: each "capture" adds one level and "override" adds two, so a
+// Compounding: each "(capture)" adds one level and "(override)" adds two, so a
 // user can always outbid a layer by writing one more word.
 func TestCaptureWordsCompound(t *testing.T) {
 	sp, h := newCaptureSP(map[string]string{
-		"capture ^C":         "level_one",
-		"capture capture ^C": "level_two",
+		"(capture) ^C":           "level_one",
+		"(capture) (capture) ^C": "level_two",
 	})
 	sp.ProcessKey("^C")
 	if want := []string{"^C→level_two"}; !reflect.DeepEqual(h.calls, want) {
@@ -208,9 +208,9 @@ func TestCaptureWordsCompound(t *testing.T) {
 	}
 
 	sp2, h2 := newCaptureSP(map[string]string{
-		"capture capture ^C":  "level_two",
-		"override ^C":         "also_level_two_but_spelled_override",
-		"override capture ^C": "level_three",
+		"(capture) (capture) ^C":  "level_two",
+		"(override) ^C":           "also_level_two_but_spelled_override",
+		"(override) (capture) ^C": "level_three",
 	})
 	sp2.ProcessKey("^C")
 	if want := []string{"^C→level_three"}; !reflect.DeepEqual(h2.calls, want) {
@@ -243,8 +243,8 @@ func TestPendingShortMatchStillFires(t *testing.T) {
 func TestResolutionOnlyModeReportsTheTopCandidate(t *testing.T) {
 	sp := NewProcessor(nil)
 	sp.SetMappings(map[string]string{
-		"up":        "go_line_prior",
-		"capture *": "tinput_key",
+		"up":          "go_line_prior",
+		"(capture) *": "tinput_key",
 	})
 	if got := sp.ProcessKey("up").Command; got != "tinput_key" {
 		t.Errorf("Command = %q, want the top candidate tinput_key", got)
@@ -263,11 +263,16 @@ func TestDisplayKey(t *testing.T) {
 		ok   bool
 	}{
 		{"^K B", "^K B", true},
-		{"capture ^C", "^C", true},
-		{"override capture up", "up", true},
-		{"capture *", "", false},
+		{"(capture) ^C", "^C", true},
+		{"(override) (capture) up", "up", true},
+		{"(capture) *", "", false},
 		{"*", "", false},
-		{"capture", "capture", true}, // the literal word as a key: level 0
+		{"capture", "capture", true},     // a bare word is a KEY, not a level
+		{"^C (capture)", "^C", true},     // the word may sit anywhere
+		{"(mac) ^C", "^C", true},         // metadata this reader does not know
+		{"(", "(", true},                 // a parenthesis is a pressable key
+		{"()", "()", true},               // ...and so is an empty pair
+		{"(capture)", "(capture)", true}, // metadata alone names no key
 	} {
 		got, ok := DisplayKey(tc.raw)
 		if got != tc.want || ok != tc.ok {
@@ -281,15 +286,15 @@ func TestDisplayKey(t *testing.T) {
 func TestRawSpellingsSurviveTheRoundTrip(t *testing.T) {
 	sp := NewProcessor(nil)
 	sp.SetDefaultHandler(testDefaultHandler)
-	sp.SetMappings(map[string]string{"capture *": "tinput_key"})
-	if got := sp.GetMapping("capture *"); got != "tinput_key" {
+	sp.SetMappings(map[string]string{"(capture) *": "tinput_key"})
+	if got := sp.GetMapping("(capture) *"); got != "tinput_key" {
 		t.Errorf("GetMapping = %q, want tinput_key", got)
 	}
 	all := sp.GetAllMappings()
-	if all["capture *"] != "tinput_key" {
-		t.Errorf("GetAllMappings = %v, want the raw capture spelling preserved", all)
+	if all["(capture) *"] != "tinput_key" {
+		t.Errorf("GetAllMappings = %v, want the raw (capture) spelling preserved", all)
 	}
-	sp.UnmapKey("capture *")
+	sp.UnmapKey("(capture) *")
 	if got := sp.ProcessKey("z").Command; got != "insert 'z'" {
 		t.Errorf("after unmap, Command = %q, want the default insert", got)
 	}
@@ -302,9 +307,9 @@ func TestRawSpellingsSurviveTheRoundTrip(t *testing.T) {
 // esc-chord.
 func TestNamedCaptureSuppressesLowerLevelSequences(t *testing.T) {
 	sp, h := newCaptureSP(map[string]string{
-		"esc X":       "cmd",
-		"esc y":       "kill_ring_yank",
-		"capture esc": "tinput_key",
+		"esc X":         "cmd",
+		"esc y":         "kill_ring_yank",
+		"(capture) esc": "tinput_key",
 	})
 	sp.ProcessKey("esc")
 	if got := sp.GetActiveSequence(); got != "" {
@@ -321,8 +326,8 @@ func TestNamedCaptureSuppressesLowerLevelSequences(t *testing.T) {
 // makes named capture safe to have.
 func TestWildcardDoesNotSuppressSequences(t *testing.T) {
 	sp, h := newCaptureSP(map[string]string{
-		"^B N":      "buffer_next",
-		"capture *": "tinput_key",
+		"^B N":        "buffer_next",
+		"(capture) *": "tinput_key",
 	})
 	sp.ProcessKey("^B")
 	if sp.GetActiveSequence() != "^B" {
@@ -339,8 +344,8 @@ func TestWildcardDoesNotSuppressSequences(t *testing.T) {
 func TestSuppressionOnlyReachesLowerLevels(t *testing.T) {
 	// Same level: the chord survives, and rule 1 still holds the prefix.
 	sp, _ := newCaptureSP(map[string]string{
-		"capture esc":   "tinput_key",
-		"capture esc X": "still_mine",
+		"(capture) esc":   "tinput_key",
+		"(capture) esc X": "still_mine",
 	})
 	sp.ProcessKey("esc")
 	if sp.GetActiveSequence() != "esc" {
@@ -349,8 +354,8 @@ func TestSuppressionOnlyReachesLowerLevels(t *testing.T) {
 
 	// Higher level: the chord outranks the claim below it.
 	sp2, _ := newCaptureSP(map[string]string{
-		"capture esc":           "tinput_key",
-		"capture capture esc X": "outranks",
+		"(capture) esc":             "tinput_key",
+		"(capture) (capture) esc X": "outranks",
 	})
 	sp2.ProcessKey("esc")
 	if sp2.GetActiveSequence() != "esc" {
