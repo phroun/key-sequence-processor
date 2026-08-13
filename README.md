@@ -12,7 +12,7 @@ Pure Go, standard library only.
 ## Features
 
 - Multi-key sequences (`^K X`, `^Q F`) with prefix disambiguation
-- Precedence levels (`capture` / `override`) so a hosted layer can claim keys
+- Precedence levels (`(capture)` / `(override)`) so a hosted layer can claim keys
 - Per-level wildcards, and specific bindings that shadow them
 - A binding can decline a key and drop resolution to the level below
 - Configurable key aliases (`^I` = `Tab`, `^M` = `Return`, …)
@@ -79,16 +79,25 @@ nothing has to be translated in between.
 
 ## Precedence levels
 
-Prefix a mapping with `capture` (+1) or `override` (+2) to raise its level;
+Mark a mapping with `(capture)` (+1) or `(override)` (+2) to raise its level;
 they compound, so a layer can always outbid another by writing one more word.
+The words may sit anywhere in the key — a level is a property of the binding,
+not a position in it.
 
 ```go
 p.SetMappings(map[string]string{
-	"up":         "cursor_up",   // level 0: the base keymap
-	"capture *":  "terminal_key", // level 1: a hosted terminal claims everything
-	"capture ^C": "false",        // ...except ^C, which it hands back
+	"up":           "cursor_up",    // level 0: the base keymap
+	"(capture) *":  "terminal_key", // level 1: a hosted terminal claims everything
+	"(capture) ^C": "false",        // ...except ^C, which it hands back
 })
 ```
+
+Everything a mapping key says *about itself* is written in parentheses, and
+everything else is keys you press. A parenthesized word this processor does not
+recognize is skipped rather than read as a key, so an application layered over
+this one can write its own metadata in the same parentheses and each reader
+takes the words it knows. A parenthesis is a pressable key, so only a whole
+token of the form `(word)` is metadata — `(`, `)`, `()` and `^(` are keys.
 
 Resolution runs from the highest level down:
 
