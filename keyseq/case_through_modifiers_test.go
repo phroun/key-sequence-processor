@@ -15,7 +15,7 @@ func TestCaseFlipReachesThroughModifiers(t *testing.T) {
 		{"H-q", "H-Q"},
 		// The two spellings of Control meet here too: the caret form writes
 		// its letter uppercase, so a lowercase C- form needs the flip AND the
-		// prefix alias applied together.
+		// prefix fallback applied together.
 		{"^Q", "C-q"},
 		{"C-q", "^Q"},
 		{"^Q", "^q"},
@@ -30,7 +30,7 @@ func TestCaseFlipReachesThroughModifiers(t *testing.T) {
 }
 
 // Binding BOTH spellings is what makes them differ, and no special rule is
-// needed for it: the sequence as pressed is tried before any alias.
+// needed for it: the sequence as pressed is tried before any fallback.
 func TestBothCasesBoundStayDistinct(t *testing.T) {
 	p := NewProcessor(nil)
 	p.SetMappings(map[string]string{

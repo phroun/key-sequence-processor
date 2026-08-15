@@ -1,6 +1,6 @@
 // Package keyseq resolves key events into application commands: multi-key
 // sequences (WordStar/JOE-style chords such as ^K X), precedence levels,
-// per-level wildcards, key aliases, and context-sensitive help topics.
+// per-level wildcards, key fallbacks, and context-sensitive help topics.
 //
 // The processor owns the resolution rules and nothing else. Commands are
 // opaque strings it hands back to the application, key names are whatever
@@ -69,7 +69,7 @@ type candidate struct {
 	level           int
 	command         string
 	wildcard        bool
-	matchedSequence string // the spelling that matched (aliases; the pending machinery reads it)
+	matchedSequence string // the spelling that matched (fallbacks; the pending machinery reads it)
 	isFallback      bool
 }
 
@@ -110,14 +110,15 @@ type Processor struct {
 	levelOrder []int
 	allKeys    map[string]bool
 
-	// Key alias mappings for fallbacks
-	keyAliases     map[string]string
+	// simpleControls maps a group's primary to its two-character control
+	// spelling, for the control-chord variants a chord's continuation keys
+	// admit (see partVariants).
 	simpleControls map[string]string
 
-	// aliasGroupOf maps every spelling to the full group it belongs to, so a
+	// fallbackGroupOf maps every spelling to the full group it belongs to, so a
 	// token can be expanded to its equivalents wherever it sits in a sequence
 	// — not only at the tail, and not only as a continuation key.
-	aliasGroupOf map[string][]string
+	fallbackGroupOf map[string][]string
 
 	// defaultHandler supplies the command for an unbound key.
 	defaultHandler DefaultHandler
@@ -144,36 +145,48 @@ func NewProcessor(executor CommandExecutor) *Processor {
 	sp := &Processor{
 		rawMap:                  make(map[string]string),
 		executor:                executor,
-		keyAliases:              make(map[string]string),
 		simpleControls:          make(map[string]string),
 		sequenceStarters:        make(map[string]bool),
 		controlSequenceStarters: make(map[string]bool),
 		keyBuffer:               make([]string, 0),
 	}
-	sp.applyAliasGroups(DefaultAliasGroups())
+	sp.applyFallbackGroups(DefaultFallbackGroups())
 	sp.rebuild()
 	return sp
 }
 
-// AliasGroup is a set of interchangeable spellings for one key. The FIRST
-// entry is the primary — the name a key actually arrives under — and the rest
-// are spellings a binding may use for it, so `^I` and `Tab` reach the same
-// binding whichever one the keymap wrote.
-type AliasGroup []string
+// FallbackGroup lists key tokens that FALL BACK to each other. It does not
+// declare them identical, and nothing here rewrites one into another.
+//
+// The distinction is the whole point. A group's members stay separate keys:
+// bind two of them and each keeps its own command, because the token as
+// pressed is matched before any fallback is considered. A group says only
+// what to try NEXT when the pressed token has no binding at a level — so
+// binding one member covers the rest, while binding several tells them apart.
+//
+// That is what makes it safe to group tokens an input channel cannot
+// distinguish. A terminal sends one byte for Ctrl-I and for Tab; grouping
+// them lets a keymap name either and still catch the key, without asserting
+// that the two are one key.
+//
+// The FIRST entry is the primary, which internals prefer where they need a
+// single representative. It carries no precedence during resolution.
+type FallbackGroup []string
 
-// DefaultAliasGroups returns the aliases a Processor starts with: the control
-// characters a terminal cannot distinguish from a named key, spelled in
-// github.com/phroun/direct-key-handler's vocabulary, which is the vocabulary
-// this package documents its examples in.
+// DefaultFallbackGroups returns the fallback groups a Processor starts with:
+// the control characters a terminal cannot distinguish from a named key,
+// written in github.com/phroun/direct-key-handler's vocabulary, which is the
+// vocabulary this package documents its examples in.
 //
 // An application with its own key names supplies its own groups
-// (SetAliasGroups) — these are a sensible default, not an assumption.
+// (SetFallbackGroups) — these are a sensible default, not an assumption.
 //
-// Return and Enter are deliberately NOT aliased. They are two physical keys
-// (the home row's and the keypad's); an application that wants them
-// interchangeable says so, rather than losing the distinction by default.
-func DefaultAliasGroups() []AliasGroup {
-	return []AliasGroup{
+// Return and Enter are deliberately given no fallback between them. They are
+// two physical keys (the home row's and the keypad's); an application that
+// wants them interchangeable says so, rather than losing the distinction by
+// default.
+func DefaultFallbackGroups() []FallbackGroup {
+	return []FallbackGroup{
 		// A terminal sends the same byte for these as for the control chord,
 		// so the two spellings name one key.
 		{"Backspace", "^H", "^8"}, // ^8 is DEL (127), which arrives as Backspace
@@ -243,23 +256,22 @@ func DefaultAliasGroups() []AliasGroup {
 	}
 }
 
-// SetAliasGroups replaces the alias groups (see AliasGroup). Pass nil to drop
-// aliasing entirely — an application whose key names carry no such ambiguity
+// SetFallbackGroups replaces the fallback groups (see FallbackGroup). Pass nil to drop
+// fallbacks entirely — an application whose key names carry no such ambiguity
 // wants no fallbacks invented for it.
 //
 // Call before mapping keys: the parsed keymap is rebuilt from the new groups.
-func (sp *Processor) SetAliasGroups(groups []AliasGroup) {
-	sp.keyAliases = make(map[string]string)
+func (sp *Processor) SetFallbackGroups(groups []FallbackGroup) {
 	sp.simpleControls = make(map[string]string)
-	sp.aliasGroupOf = make(map[string][]string)
-	sp.applyAliasGroups(groups)
+	sp.fallbackGroupOf = make(map[string][]string)
+	sp.applyFallbackGroups(groups)
 	sp.rebuild()
 }
 
-// applyAliasGroups indexes groups into the lookup maps resolution uses.
-func (sp *Processor) applyAliasGroups(groups []AliasGroup) {
-	if sp.aliasGroupOf == nil {
-		sp.aliasGroupOf = make(map[string][]string)
+// applyFallbackGroups indexes groups into the lookup maps resolution uses.
+func (sp *Processor) applyFallbackGroups(groups []FallbackGroup) {
+	if sp.fallbackGroupOf == nil {
+		sp.fallbackGroupOf = make(map[string][]string)
 	}
 	for _, group := range groups {
 		if len(group) == 0 {
@@ -267,14 +279,13 @@ func (sp *Processor) applyAliasGroups(groups []AliasGroup) {
 		}
 		members := append([]string(nil), group...)
 		for _, m := range members {
-			sp.aliasGroupOf[m] = members
+			sp.fallbackGroupOf[m] = members
 		}
 		primary := group[0]
-		for _, alias := range group[1:] {
-			if len(alias) == 2 && alias[0] == '^' {
-				sp.simpleControls[primary] = alias
+		for _, member := range group[1:] {
+			if len(member) == 2 && member[0] == '^' {
+				sp.simpleControls[primary] = member
 			}
-			sp.keyAliases[alias] = primary
 		}
 	}
 }
@@ -549,7 +560,7 @@ func (sp *Processor) updateSequenceStarters() {
 		// for the same reason its tail completes on either case, and one bound
 		// "esc x" opens on Escape's control form.
 		//
-		// Control-ness follows the BOUND spelling, so an alias cannot silently
+		// Control-ness follows the BOUND spelling, so a fallback cannot silently
 		// turn a named chord into a control one.
 		for _, sp2 := range sp.partVariants(firstPart, false) {
 			sp.sequenceStarters[sp2] = true
@@ -567,7 +578,7 @@ func (sp *Processor) isControlStarter(key string) bool {
 	if sp.controlSequenceStarters[key] {
 		return true
 	}
-	for _, sib := range sp.aliasSiblings(key) {
+	for _, sib := range sp.fallbackSiblings(key) {
 		if sp.controlSequenceStarters[sib] {
 			return true
 		}
@@ -603,7 +614,7 @@ var modifierRank = map[string]int{
 	"^":  7, // Control again, hugging the base key
 }
 
-// prefixAliasGroups are modifier prefixes that reach each other. Two shapes
+// prefixFallbackGroups are modifier prefixes that reach each other. Two shapes
 // live here, and the difference is real even though the machinery is the same:
 //
 //   - "^" and "C-" are two SPELLINGS of one modifier. Nothing can tell them
@@ -617,7 +628,7 @@ var modifierRank = map[string]int{
 // There is no "A-". The PC Alt key induces Meta, and "M-" is what that is
 // called here — a separate Alt modifier would be a distinction no keyboard in
 // this vocabulary can make.
-var prefixAliasGroups = [][]string{
+var prefixFallbackGroups = [][]string{
 	{"^", "C-"},
 	{"M-", "m-"},
 }
@@ -625,7 +636,7 @@ var prefixAliasGroups = [][]string{
 // prefixSiblings maps each modifier spelling to its whole group.
 var prefixSiblings = func() map[string][]string {
 	m := make(map[string][]string)
-	for _, g := range prefixAliasGroups {
+	for _, g := range prefixFallbackGroups {
 		for _, p := range g {
 			m[p] = g
 		}
@@ -669,7 +680,7 @@ func splitModifierStack(prefix string) (mods []string, rest string) {
 
 // canonicalizeStack sorts a stack of modifier spellings into modifierRank
 // order. The sort is stable, so two spellings that share a rank (M- and its
-// A- alias) keep the order they were written in rather than swapping.
+// A- spelling) keep the order they were written in rather than swapping.
 func canonicalizeStack(mods []string) []string {
 	out := append([]string(nil), mods...)
 	sort.SliceStable(out, func(i, j int) bool {
@@ -700,7 +711,7 @@ func permuteStack(mods []string) [][]string {
 }
 
 // prefixSpellings returns every way a stack of modifier prefixes can be
-// written: each component varied across its alias group, and the whole stack
+// written: each component varied across its fallback group, and the whole stack
 // put in canonical order. Order is not meaning, so a keymap that writes
 // "S-C-Up" is naming the same key as one that writes "C-S-Up".
 func prefixSpellings(prefix string) []string {
@@ -769,7 +780,7 @@ func splitModifiers(token string) (prefix, base string) {
 	}
 }
 
-// aliasSiblings returns the other spellings of one key token: its own alias
+// fallbackSiblings returns the other tokens one key token falls back to: its own
 // group, plus — for a modified key — the group of its base name with the
 // modifiers put back on. The token itself is not included.
 //
@@ -784,8 +795,8 @@ func splitModifiers(token string) (prefix, base string) {
 // letter is — `M` and `m` are one keystroke, and hanging a modifier off it
 // does not change that — so `s-M` and `s-m` name one key too. They differ only
 // when BOTH are bound, which needs no rule here: the sequence as pressed is
-// tried before any alias, so an exact binding always wins.
-func (sp *Processor) aliasSiblings(token string) []string {
+// tried before any fallback, so an exact binding always wins.
+func (sp *Processor) fallbackSiblings(token string) []string {
 	var out []string
 	add := func(s string) {
 		if s == token {
@@ -798,11 +809,11 @@ func (sp *Processor) aliasSiblings(token string) []string {
 		}
 		out = append(out, s)
 	}
-	for _, sib := range sp.aliasGroupOf[token] {
+	for _, sib := range sp.fallbackGroupOf[token] {
 		add(sib)
 	}
 	if prefix, base := splitModifiers(token); prefix != "" {
-		bases := append([]string{base}, sp.aliasGroupOf[base]...)
+		bases := append([]string{base}, sp.fallbackGroupOf[base]...)
 		// The case flip is a base spelling like any other, so it goes through
 		// the same prefix pass. That is also what lets the two spellings of
 		// Control meet: the caret form writes its letter uppercase, so `C-q`
@@ -810,7 +821,7 @@ func (sp *Processor) aliasSiblings(token string) []string {
 		// together.
 		if flip := caseFlip(base); flip != "" {
 			bases = append(bases, flip)
-			bases = append(bases, sp.aliasGroupOf[flip]...)
+			bases = append(bases, sp.fallbackGroupOf[flip]...)
 		}
 		for _, p := range prefixSpellings(prefix) {
 			for _, b := range bases {
@@ -985,10 +996,10 @@ func (sp *Processor) getKeyFallbacks(sequence string) []string {
 
 	// Every token admits its equivalent spellings, combined across ALL parts at
 	// once — a key must reach its mapping whichever spelling the map uses,
-	// wherever in the chord it sits and however many parts are aliased at the
+	// wherever in the chord it sits and however many parts have fallbacks at the
 	// same time ("^O ^V C" for a mapped "^O V ^C", "^K minus minus" for
 	// "^K - -", "^[ x" for "esc x"). The as-pressed sequence enumerates first,
-	// so an exact mapping always wins over an alias.
+	// so an exact mapping always wins over a fallback.
 	if parts := strings.Split(sequence, " "); len(parts) > 1 {
 		// Control-ness is a property of the chord being typed, decided by the
 		// starter as pressed, and it applies only to CONTINUATION keys: a bare
@@ -1022,7 +1033,7 @@ func (sp *Processor) getKeyFallbacks(sequence string) []string {
 
 	// A single key has no parts loop above, so expand its group here.
 	if !strings.Contains(sequence, " ") {
-		fallbacks = append(fallbacks, sp.aliasSiblings(sequence)...)
+		fallbacks = append(fallbacks, sp.fallbackSiblings(sequence)...)
 	}
 
 	return fallbacks
@@ -1030,12 +1041,12 @@ func (sp *Processor) getKeyFallbacks(sequence string) []string {
 
 // partVariants returns the equivalent spellings of one continuation key token
 // within a sequence, the token itself always first (so as-pressed outranks any
-// alias). A single letter admits its case flip; within a control-started
+// fallback). A single letter admits its case flip; within a control-started
 // sequence it also admits its control form (c/C ~ ^C), and a control token or
-// a named key with a control alias admits its plain letter in both cases
+// a named key with a control spelling admits its plain letter in both cases
 // (^C ~ C ~ c, return ~ ^M ~ M ~ m). This is what lets "^B C" entered as
 // "^B ^C" complete the mapping mid-sequence instead of abandoning the prefix.
-// Alias-group spellings (esc/^[, minus/-, M-minus/M--) come from aliasSiblings
+// Fallback-group members (esc/^[, minus/-, M-minus/M--) come from fallbackSiblings
 // and apply at any position, in or out of a control chord.
 func (sp *Processor) partVariants(part string, controlSeq bool) []string {
 	out := []string{part}
@@ -1057,10 +1068,10 @@ func (sp *Processor) partVariants(part string, controlSeq bool) []string {
 			add("^" + strings.ToUpper(part)) // control keys are canonically ^X
 		}
 	}
-	// Alias-group siblings apply at ANY position and in any context: esc/^[ or
+	// Fallback-group siblings apply at ANY position and in any context: esc/^[ or
 	// minus/- name one key wherever they appear, unlike the control/case layer
 	// below, which is only meaningful for a continuation key.
-	for _, sib := range sp.aliasSiblings(part) {
+	for _, sib := range sp.fallbackSiblings(part) {
 		add(sib)
 	}
 	if controlSeq {

@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-*WordStar/JOE-style key sequences and chords for Go: multi-key sequences, precedence levels, wildcards, aliases and context help topics.*
+*WordStar/JOE-style key sequences and chords for Go: multi-key sequences, precedence levels, wildcards, fallbacks and context help topics.*
 *If you use this, please support me on ko-fi:  [https://ko-fi.com/jeffday](https://ko-fi.com/F2F61JR2B4)*
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F2F61JR2B4)
@@ -15,7 +15,7 @@ Pure Go, standard library only.
 - Precedence levels (`(capture)` / `(override)`) so a hosted layer can claim keys
 - Per-level wildcards, and specific bindings that shadow them
 - A binding can decline a key and drop resolution to the level below
-- Configurable key aliases (`^I` = `Tab`, `^M` = `Return`, …)
+- Configurable key fallbacks (`^I` = `Tab`, `^M` = `Return`, …)
 - Context-sensitive help topics per sequence prefix
 - Completion listing for a partially typed sequence
 - Optional macOS Option-character layer for unbound Meta keys, on any platform
@@ -122,33 +122,35 @@ Pass a `nil` executor and nothing is dispatched: `ProcessKey` reports the
 top-precedence command in `ProcessResult.Command` instead. Useful for showing a
 user what a key would do.
 
-## Key aliases
+## Key fallbacks
 
 A terminal sends the same byte for `Tab` as for `^I`, so a binding written
-either way should reach the same place. `DefaultAliasGroups` covers those cases
+either way should reach the same place. `DefaultFallbackGroups` covers those cases
 in [direct-key-handler](https://github.com/phroun/direct-key-handler)'s
-vocabulary. The first entry of each group is the primary; the rest are
-spellings a binding may use.
+vocabulary. A group does not declare its members identical — it says what to
+try NEXT when the token as pressed has no binding, so naming any one of them
+catches the key while binding several keeps them apart. The first entry is the
+primary, which internals prefer where they need one representative.
 
-| Key | Spellings | Why |
+| Key | Falls back to | Why |
 |-----|-----------|-----|
 | `Backspace` | `^H`, `^8` | `^H` is BS (8); `^8` is DEL (127), which arrives as Backspace |
 | `Tab` | `^I` | one byte (9) for both |
 | `Return` | `^M` | one byte (13) for both |
 | `Escape` | `^[`, `^3`, `Esc` | one byte (27); `^3` is how a keyboard makes it with a digit |
-| `^@` | `^2`, `^space` | NUL, also Ctrl+Space |
+| `^@` | `^2`, `^Space` | NUL, which Ctrl+@ and Ctrl+Space both send |
 | `^\` | `^4` | FS |
 | `^]` | `^5` | GS |
 | `^^` | `^6` | RS |
 | `^_` | `^7` | US |
 
-`Return` and `Enter` are deliberately **not** aliased: they are two physical
-keys, and folding them is an application's decision, not a default that quietly
-discards the distinction.
+`Return` and `Enter` deliberately have **no** fallback between them: they are
+two physical keys, and folding them is an application's decision, not a default
+that quietly discards the distinction.
 
-Aliases are lookups, never rewrites. The spelling as pressed is tried first, so
+Fallbacks are lookups, never rewrites. The token as pressed is tried first, so
 naming both `^H` and `Backspace` keeps them separately bindable — a group only
-fills in when the keymap left one of its spellings unnamed.
+fills in when the keymap left one of its members unnamed.
 
 ### Spellings
 
@@ -191,17 +193,17 @@ peeled off, the base varied, and the prefix put back, so `M-Minus` and `M--`
 name one key. `^` and `C-` are one modifier under two spellings, so `^-`,
 `^Minus`, `C--` and `C-Minus` all reach the same binding.
 
-An application with its own key names supplies its own groups — first entry is
-the primary, the rest are spellings a binding may use:
+An application with its own key names supplies its own groups — the first entry
+is the primary, and every member falls back to the others:
 
 ```go
-p.SetAliasGroups([]keyseq.AliasGroup{
+p.SetFallbackGroups([]keyseq.FallbackGroup{
 	{"esc", "escape", "^["},
 	{"back", "^H", "backspace"},
 })
 ```
 
-Pass `nil` to drop aliasing entirely.
+Pass `nil` to drop fallbacks entirely.
 
 ## Modifiers
 
@@ -277,6 +279,23 @@ MIT — see [LICENSE](LICENSE).
 
 ## Change Log
 
+### 0.1.7
+
+- **Renamed:** `AliasGroup` → `FallbackGroup`, `SetAliasGroups` →
+  `SetFallbackGroups`, `DefaultAliasGroups` → `DefaultFallbackGroups`. The word
+  *alias* is gone from this package.
+- The old name suggested identity, and the mechanism has never been identity:
+  members stay separate keys, the token as pressed is matched before any
+  fallback, and binding two members keeps them apart. Calling that an alias
+  invited the reading that grouping two keys merges them, which is the one
+  thing it does not do.
+- *Spellings* stay a separate idea and keep the name: those are alternate ways
+  to WRITE a key in a keymap (`Minus`, `Esc`, `PgUp`), and nothing emits them.
+- Removed a dead `alias → primary` table that nothing read; it was the only
+  piece shaped like identity, and it did nothing.
+- **Upgrading:** rename the three identifiers at your call sites. No behavior
+  changed.
+
 ### 0.1.0
 
 - Extracted from the [mew](https://github.com/phroun/mew) editor, where this
@@ -290,10 +309,10 @@ MIT — see [LICENSE](LICENSE).
 
 ### 0.1.1
 
-- Key aliases became configurable (`SetAliasGroups`, `AliasGroup`), and the
-  defaults now use direct-key-handler's vocabulary (`Tab`, `Return`, `Escape`,
-  `Backspace`) rather than one editor's. `Return` and `Enter` are no longer
-  aliased to each other.
+- Key fallbacks became configurable (then named `SetAliasGroups` /
+  `AliasGroup`; see 0.1.7), and the defaults now use direct-key-handler's
+  vocabulary (`Tab`, `Return`, `Escape`, `Backspace`) rather than one editor's.
+  `Return` and `Enter` no longer fall back to each other.
 - **Upgrading:** an application whose key names differ from the defaults must
   now declare its own groups; previously one editor's were assumed.
 
@@ -317,12 +336,12 @@ MIT — see [LICENSE](LICENSE).
 
 ### 0.1.2
 
-- Aliases resolve in **every** position of a sequence, not only at the tail and
-  not only one per chord. A chord bound `esc x` could not be typed `^[ x` at
+- Fallbacks resolve in **every** position of a sequence, not only at the tail
+  and not only one per chord. A chord bound `esc x` could not be typed `^[ x` at
   all — the initiator was not recognized, so the chord never began — and
-  `^K Minus Minus` matched neither slot. Alias spellings of a bound initiator are
+  `^K Minus Minus` matched neither slot. Group members of a bound initiator are
   now registered as initiators too.
-- Aliases resolve **through modifier prefixes**: the prefix stack is peeled off,
+- Fallbacks resolve **through modifier prefixes**: the prefix stack is peeled off,
   the base varied, and the prefix restored, so `M-Minus` and `M--` name one key.
 - `^` and `C-` are recognized as one modifier under two spellings, in bindings
   and in control-chord detection alike (`C-B M` completes on `C-B ^M`).

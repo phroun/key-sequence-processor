@@ -9,7 +9,7 @@ import (
 // The defaults speak direct-key-handler's vocabulary, so a binding written
 // against a control character reaches the named key it arrives as, and the
 // other way round.
-func TestDefaultAliasGroupsUseHandlerVocabulary(t *testing.T) {
+func TestDefaultFallbackGroupsUseHandlerVocabulary(t *testing.T) {
 	cases := []struct{ bound, pressed string }{
 		{"^I", "Tab"},
 		{"Tab", "^I"},
@@ -40,7 +40,7 @@ func TestDefaultAliasGroupsUseHandlerVocabulary(t *testing.T) {
 // It was spelled "^space", which joined nothing anyone would write: the
 // lowercase name is not in this vocabulary. The miss was silent, because a
 // binding that matches nothing simply never fires.
-func TestDefaultAliasGroupsSpellCtrlSpaceInVocabulary(t *testing.T) {
+func TestDefaultFallbackGroupsSpellCtrlSpaceInVocabulary(t *testing.T) {
 	for _, c := range []struct{ bound, pressed string }{
 		{"^Space", "^@"}, // written by name, arrives as the byte
 		{"^Space", "^2"},
@@ -71,8 +71,8 @@ func TestDefaultAliasGroupsSpellCtrlSpaceInVocabulary(t *testing.T) {
 // member may be a name the vocabulary never produces. Lowercase is the tell:
 // key names here are capitalised, so a lowercase base is a spelling nothing
 // emits and nothing would think to bind.
-func TestDefaultAliasGroupsAreAllInVocabulary(t *testing.T) {
-	for _, g := range DefaultAliasGroups() {
+func TestDefaultFallbackGroupsAreAllInVocabulary(t *testing.T) {
+	for _, g := range DefaultFallbackGroups() {
 		for _, name := range g {
 			base := name
 			for _, p := range []string{"^", "C-", "M-", "m-", "S-", "s-", "H-", "G-"} {
@@ -90,10 +90,10 @@ func TestDefaultAliasGroupsAreAllInVocabulary(t *testing.T) {
 	}
 }
 
-// Return and Enter are two physical keys and are NOT aliased by default:
+// Return and Enter are two physical keys and are NOT given a fallback by default:
 // folding them is an application's choice, not a default that quietly
 // discards the distinction.
-func TestDefaultAliasGroupsKeepReturnAndEnterApart(t *testing.T) {
+func TestDefaultFallbackGroupsKeepReturnAndEnterApart(t *testing.T) {
 	sp := NewProcessor(nil)
 	sp.SetMappings(map[string]string{"Return": "submit"})
 	if got := sp.ProcessKey("Enter").Command; got == "submit" {
@@ -102,9 +102,9 @@ func TestDefaultAliasGroupsKeepReturnAndEnterApart(t *testing.T) {
 }
 
 // An application with its own key names supplies its own groups.
-func TestSetAliasGroups(t *testing.T) {
+func TestSetFallbackGroups(t *testing.T) {
 	sp := NewProcessor(nil)
-	sp.SetAliasGroups([]AliasGroup{
+	sp.SetFallbackGroups([]FallbackGroup{
 		{"esc", "escape", "^["},
 		{"back", "^H", "backspace"},
 	})
@@ -126,18 +126,18 @@ func TestSetAliasGroups(t *testing.T) {
 	// The replaced defaults no longer apply.
 	sp.SetMappings(map[string]string{"Tab": "indent"})
 	if got := sp.ProcessKey("^I").Command; got == "indent" {
-		t.Error("a default alias survived SetAliasGroups")
+		t.Error("a default fallback survived SetFallbackGroups")
 	}
 }
 
-// nil drops aliasing entirely, for an application whose names carry no such
+// nil drops fallbacks entirely, for an application whose names carry no such
 // ambiguity and wants no fallbacks invented for it.
-func TestSetAliasGroupsNilDisablesAliasing(t *testing.T) {
+func TestSetFallbackGroupsNilDisablesFallbacks(t *testing.T) {
 	sp := NewProcessor(nil)
-	sp.SetAliasGroups(nil)
+	sp.SetFallbackGroups(nil)
 	sp.SetMappings(map[string]string{"Tab": "indent"})
 	if got := sp.ProcessKey("^I").Command; got == "indent" {
-		t.Errorf("^I still aliased to Tab after aliasing was dropped (got %q)", got)
+		t.Errorf("^I still given a fallback to Tab after fallbacks was dropped (got %q)", got)
 	}
 	if got := sp.ProcessKey("Tab").Command; got != "indent" {
 		t.Errorf("the binding itself broke: Tab -> %q, want indent", got)
