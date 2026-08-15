@@ -4,7 +4,7 @@ import "testing"
 
 // posGroups are a realistic mixture: named keys with control spellings, and
 // symbols with word spellings.
-var posGroups = []AliasGroup{
+var posGroups = []FallbackGroup{
 	{"back", "^H", "backspace"},
 	{"tab", "^I"},
 	{"return", "enter", "^M"},
@@ -16,7 +16,7 @@ var posGroups = []AliasGroup{
 func seqResolves(t *testing.T, bound string, keys ...string) string {
 	t.Helper()
 	p := NewProcessor(nil)
-	p.SetAliasGroups(posGroups)
+	p.SetFallbackGroups(posGroups)
 	p.SetMappings(map[string]string{bound: "TARGET"})
 	var last string
 	for _, k := range keys {
@@ -39,12 +39,12 @@ func mustNotResolve(t *testing.T, bound string, keys ...string) {
 	}
 }
 
-// An alias resolves wherever it sits in a chord — as the starter, in the
+// An fallback resolves wherever it sits in a chord — as the starter, in the
 // middle, at the tail, and in several positions at once. Matching used to swap
 // a single spelling at the tail only, so a chord bound "esc x" could not be
 // typed with Escape's control form at all: the starter was not recognized, the
 // prefix was never held, and the chord simply never began.
-func TestAliasResolvesInEveryPosition(t *testing.T) {
+func TestFallbackResolvesInEveryPosition(t *testing.T) {
 	// Starter.
 	mustResolve(t, "esc x", "^[", "x")
 	mustResolve(t, "esc x", "escape", "x")
@@ -63,9 +63,9 @@ func TestAliasResolvesInEveryPosition(t *testing.T) {
 }
 
 // The control/case layer is what lets a chord bound "^B M" be completed with
-// Ctrl-M, or with the Return key. It must survive alias expansion: the alias
+// Ctrl-M, or with the Return key. It must survive fallback expansion: the fallback
 // group's primary must not swallow "^M" before the letter variants are tried.
-func TestControlVariantSurvivesAliasExpansion(t *testing.T) {
+func TestControlVariantSurvivesFallbackExpansion(t *testing.T) {
 	mustResolve(t, "^B M", "^B", "^M")
 	mustResolve(t, "^B M", "^B", "return")
 	mustResolve(t, "^B m", "^B", "^M")
@@ -87,18 +87,18 @@ func TestControlVariantStaysContextual(t *testing.T) {
 
 // A single key still resolves through its group, which is the path a chordless
 // binding takes (no parts loop runs for it).
-func TestSingleKeyAliasStillResolves(t *testing.T) {
+func TestSingleKeyFallbackStillResolves(t *testing.T) {
 	mustResolve(t, "return", "^M")
 	mustResolve(t, "esc", "^[")
 	mustResolve(t, "minus", "-")
 	mustResolve(t, "-", "minus")
 }
 
-// An exact mapping outranks an aliased one: the as-pressed spelling enumerates
+// An exact mapping outranks an given a fallback one: the as-pressed spelling enumerates
 // first, so a keymap that names both spellings gets the one the user typed.
-func TestExactSpellingWinsOverAlias(t *testing.T) {
+func TestExactSpellingWinsOverFallback(t *testing.T) {
 	p := NewProcessor(nil)
-	p.SetAliasGroups(posGroups)
+	p.SetFallbackGroups(posGroups)
 	p.SetMappings(map[string]string{
 		"^K -":     "by_symbol",
 		"^K minus": "by_word",
@@ -109,16 +109,16 @@ func TestExactSpellingWinsOverAlias(t *testing.T) {
 	}
 }
 
-// Aliases add lookups; they never rewrite the event. Two spellings a modern
+// Fallbacks add lookups; they never rewrite the event. Two spellings a modern
 // terminal CAN distinguish (the kitty protocol reports Ctrl-H and Backspace
 // separately, where a legacy terminal sent one byte for both) stay separately
-// bindable — the alias only fills in when the keymap left one of them unnamed.
-// Nothing about a key's identity is discarded by declaring it aliasable.
-func TestAliasesNeverDiscardADistinction(t *testing.T) {
-	groups := []AliasGroup{{"Backspace", "^H"}}
+// bindable — the fallback only fills in when the keymap left one of them unnamed.
+// Nothing about a key's identity is discarded by declaring it able to fall back.
+func TestFallbackesNeverDiscardADistinction(t *testing.T) {
+	groups := []FallbackGroup{{"Backspace", "^H"}}
 	bind := func(m map[string]string, keys ...string) string {
 		p := NewProcessor(nil)
-		p.SetAliasGroups(groups)
+		p.SetFallbackGroups(groups)
 		p.SetMappings(m)
 		var last string
 		for _, k := range keys {
@@ -130,7 +130,7 @@ func TestAliasesNeverDiscardADistinction(t *testing.T) {
 	// Named separately: each keeps its own meaning, alone and in a chord.
 	both := map[string]string{"^H": "ctrl_h", "Backspace": "erase"}
 	if got := bind(both, "^H"); got != "ctrl_h" {
-		t.Errorf("^H -> %q, want its own binding, not the alias's", got)
+		t.Errorf("^H -> %q, want its own binding, not the fallback's", got)
 	}
 	if got := bind(both, "Backspace"); got != "erase" {
 		t.Errorf("Backspace -> %q, want its own binding", got)

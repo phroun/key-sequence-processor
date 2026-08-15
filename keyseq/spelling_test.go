@@ -2,11 +2,11 @@ package keyseq
 
 import "testing"
 
-func bindAndPress(t *testing.T, groups []AliasGroup, bound string, keys ...string) string {
+func bindAndPress(t *testing.T, groups []FallbackGroup, bound string, keys ...string) string {
 	t.Helper()
 	p := NewProcessor(nil)
 	if groups != nil {
-		p.SetAliasGroups(groups)
+		p.SetFallbackGroups(groups)
 	}
 	p.SetMappings(map[string]string{bound: "TARGET"})
 	var last string
@@ -39,7 +39,7 @@ func TestDefaultSpellingsResolveBareKeys(t *testing.T) {
 
 // The case the words were invented for: `-` is the modifier separator, so `M--`
 // is exactly where writing the symbol hurts. A spelling that only worked on a
-// bare key would miss it, since alias groups match whole tokens and `M-Minus`
+// bare key would miss it, since fallback groups match whole tokens and `M-Minus`
 // and `M--` are two unrelated strings until the modifiers are peeled off.
 func TestSpellingsResolveInsideModifierChords(t *testing.T) {
 	cases := []struct{ word, symbol string }{
@@ -249,7 +249,7 @@ func TestNamedKeyAbbreviations(t *testing.T) {
 	}
 }
 
-// Del and Delete are NOT aliased. A PC's Del is forward delete; the key a Mac
+// Del and Delete are NOT given a fallback. A PC's Del is forward delete; the key a Mac
 // labels "delete" is Backspace. Folding them would bind the wrong key on one
 // platform or the other, so an application that wants an abbreviation here
 // declares which one it means.
