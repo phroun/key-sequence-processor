@@ -183,7 +183,13 @@ func DefaultAliasGroups() []AliasGroup {
 
 		// Control-number spellings for the control characters that have no
 		// letter: a keyboard produces these with Ctrl and a digit.
-		{"^@", "^2", "^space"}, // NUL, also Ctrl+Space
+		// NUL, which Ctrl+@ and Ctrl+Space both send — indistinguishable on the
+		// byte wire, so the three spellings name one input. "Space" is this
+		// package's name for the key (direct-key-handler's KeySpace), and the
+		// modifier is what makes the token: a lowercase "^space" here was a
+		// name nothing emits, which left a correctly-spelled "^Space" binding
+		// unreachable from the byte that arrives.
+		{"^@", "^2", "^Space"},
 		{"^\\", "^4"},
 		{"^]", "^5"},
 		{"^^", "^6"},
