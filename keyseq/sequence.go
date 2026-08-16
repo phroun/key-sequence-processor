@@ -606,8 +606,8 @@ var modifierPrefixes = []string{"S-", "M-", "m-", "C-", "s-", "H-", "G-", "^"}
 var modifierRank = map[string]int{
 	"C-": 0, // Control
 	"G-": 1, // Glyph (AltGr / ISO_Level3_Shift; private)
-	"M-": 2, // Meta, as induced by the PC Alt key
-	"m-": 3, // Meta proper (the modifier a Space Cadet keyboard had its own key for)
+	"M-": 2, // Mega
+	"m-": 3, // Micro (the modifier a Space Cadet keyboard had its own key for)
 	"S-": 4, // Shift
 	"s-": 5, // Super / Command
 	"H-": 6, // Hyper
@@ -620,14 +620,15 @@ var modifierRank = map[string]int{
 //   - "^" and "C-" are two SPELLINGS of one modifier. Nothing can tell them
 //     apart, because there is nothing to tell apart.
 //   - "M-" and "m-" are two DIFFERENT modifiers that fall back to each other.
-//     A terminal reports the PC Alt key and a true Meta key on separate bits,
-//     and most keyboards only have the first. Binding one catches either;
-//     binding both keeps them apart, since the spelling as pressed always
-//     enumerates first.
+//     A terminal reports Mega and Micro on separate bits, and most keyboards
+//     only have the first. Binding one catches either; binding both keeps them
+//     apart, since the spelling as pressed always enumerates first.
 //
-// There is no "A-". The PC Alt key induces Meta, and "M-" is what that is
-// called here — a separate Alt modifier would be a distinction no keyboard in
-// this vocabulary can make.
+// There is no "A-". Mega and Micro are the two modifiers with a claim to the
+// name Meta — Emacs and the PC keyboard mean the first, X11 and the Space
+// Cadet mean the second — so neither takes it, and they split by the case of
+// their prefix. A third modifier beside them would be a distinction no
+// keyboard in this vocabulary can make.
 var prefixFallbackGroups = [][]string{
 	{"^", "C-"},
 	{"M-", "m-"},

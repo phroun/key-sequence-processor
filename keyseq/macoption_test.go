@@ -41,7 +41,7 @@ func TestMacOptionCharIgnoresOtherKeys(t *testing.T) {
 	}
 }
 
-// A binding on a Meta key beats the Option layer: the whole point is that
+// A binding on a Mega key beats the Option layer: the whole point is that
 // bindings take the combos they name while everything else still types.
 func TestBindingBeatsMacOptionLayer(t *testing.T) {
 	sp, h := newCaptureSP(map[string]string{"M-d": "delete_word"})
@@ -52,9 +52,9 @@ func TestBindingBeatsMacOptionLayer(t *testing.T) {
 	}
 }
 
-// And an UNBOUND Meta key reaches the default handler, which asks the layer
+// And an UNBOUND Mega key reaches the default handler, which asks the layer
 // what it composes and spells the command in its own vocabulary.
-func TestUnboundMetaKeyTypesItsOptionCharacter(t *testing.T) {
+func TestUnboundMegaKeyTypesItsOptionCharacter(t *testing.T) {
 	sp, h := newCaptureSP(map[string]string{})
 	sp.SetMacOptionInsert(true)
 	sp.SetDefaultHandler(func(key string) string {

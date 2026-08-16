@@ -1,9 +1,9 @@
 package keyseq
 
-// macOptionChars maps Meta key names back to the character macOS Option
+// macOptionChars maps Mega key names back to the character macOS Option
 // produces for that key (US layout).
 //
-// It exists because a terminal forces an either/or: Option is Meta, or Option
+// It exists because a terminal forces an either/or: the Option cap is Mega, or it
 // types characters — not both. Whichever way the terminal is set, one half is
 // normally lost. This table restores it from the binding side: an M- key no
 // binding claimed types the character Option would have produced. So bindings
@@ -54,14 +54,14 @@ var macOptionChars = map[string]string{
 	"M-/": "÷", "M-`": "`",
 }
 
-// SetMacOptionInsert enables the Option-character layer for unbound Meta keys
+// SetMacOptionInsert enables the Option-character layer for unbound Mega keys
 // (see macOptionChars). Off by default; the application decides, since the
 // relevant keyboard is the user's, not the host's.
 func (sp *Processor) SetMacOptionInsert(enabled bool) {
 	sp.macOptionInsert = enabled
 }
 
-// MacOptionChar returns the character macOS Option produces for a Meta key
+// MacOptionChar returns the character macOS Option produces for a Mega key
 // name, and whether the layer applies to it: false when the layer is off, or
 // when the key is not one Option composes.
 //
