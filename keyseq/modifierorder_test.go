@@ -47,24 +47,23 @@ func TestCanonicalOrder(t *testing.T) {
 	}
 }
 
-// There is no A- modifier: the PC Alt key induces Meta, which is spelled M-.
-// An "A-" written in a keymap is not a modifier at all, so it stays part of the
-// key name rather than being silently accepted as one.
-func TestNoAltModifier(t *testing.T) {
+// There is no A- modifier. The key a PC puts under the Alt cap is Mega, spelled
+// M-. An "A-" written in a keymap is not a modifier at all, so it stays part of
+// the key name rather than being silently accepted as one.
+func TestNoAModifier(t *testing.T) {
 	if _, ok := modifierRank["A-"]; ok {
 		t.Error("A- has a canonical rank; it is not a modifier in this vocabulary")
 	}
 	if got := bindAndPress(t, nil, "M-x", "A-x"); got == "TARGET" {
-		t.Error("A-x reached an M-x binding; A- is not a spelling of Meta")
+		t.Error("A-x reached an M-x binding; A- is not a spelling of Mega")
 	}
 }
 
-// M- and m- are two DIFFERENT modifiers that fall back to each other: a
-// terminal reports the PC Alt key on one bit and a true Meta key on another,
-// and most keyboards only have the first. This is the ^H/Backspace shape, not
-// the ^/C- shape — bind one and either reaches it, bind both and they stay
-// apart.
-func TestMetaSpellings(t *testing.T) {
+// Mega and Micro are two DIFFERENT modifiers that fall back to each other: a
+// terminal reports them on separate bits, and most keyboards only have the
+// first. This is the ^H/Backspace shape, not the ^/C- shape — bind one and
+// either reaches it, bind both and they stay apart.
+func TestMegaAndMicroFallBack(t *testing.T) {
 	// Either spelling reaches a binding that names only the other.
 	for _, c := range []struct{ bound, pressed string }{
 		{"M-x", "m-x"},
@@ -79,12 +78,12 @@ func TestMetaSpellings(t *testing.T) {
 	// Named separately, they keep their own meanings — nothing is discarded by
 	// declaring them reachable.
 	p := NewProcessor(nil)
-	p.SetMappings(map[string]string{"M-x": "alt_induced", "m-x": "true_meta"})
-	if got := p.ProcessKey("M-x").Command; got != "alt_induced" {
+	p.SetMappings(map[string]string{"M-x": "mega", "m-x": "micro"})
+	if got := p.ProcessKey("M-x").Command; got != "mega" {
 		t.Errorf("M-x -> %q, want its own binding", got)
 	}
 	p.ClearActiveSequence()
-	if got := p.ProcessKey("m-x").Command; got != "true_meta" {
+	if got := p.ProcessKey("m-x").Command; got != "micro" {
 		t.Errorf("m-x -> %q, want its own binding", got)
 	}
 }
