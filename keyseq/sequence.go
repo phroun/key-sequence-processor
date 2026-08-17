@@ -593,7 +593,7 @@ func (sp *Processor) isControlStarter(key string) bool {
 // second should not have to know that the first is spelled without a dash.
 // Order matters only for matching the longest spelling first; the canonical
 // ORDER a stack is written in is modifierRank below.
-var modifierPrefixes = []string{"S-", "M-", "m-", "C-", "s-", "H-", "G-", "^"}
+var modifierPrefixes = []string{"S-", "M-", "m-", "C-", "s-", "H-", "G-", "P-", "p-", "^"}
 
 // modifierRank is the canonical order a stack of modifiers is written in. Two
 // keymaps that name the same chord in different orders name the same key, so
@@ -611,7 +611,9 @@ var modifierRank = map[string]int{
 	"S-": 4, // Shift
 	"s-": 5, // Super / Command
 	"H-": 6, // Hyper
-	"^":  7, // Control again, hugging the base key
+	"P-": 7, // Keypad, and "p-" its lowercase twin: the key's ORIGIN, not a
+	"p-": 8, // held modifier, so it sits nearest the base of the real ones
+	"^":  9, // Control again, hugging the base key
 }
 
 // prefixFallbackGroups are modifier prefixes that reach each other. Two shapes
@@ -632,7 +634,22 @@ var modifierRank = map[string]int{
 var prefixFallbackGroups = [][]string{
 	{"^", "C-"},
 	{"M-", "m-"},
+	{"P-", "p-"},
 }
+
+// droppablePrefixes are modifiers a key falls back to being WITHOUT.
+//
+// The keypad prefixes are the only ones, and they are droppable because they
+// do not say what was held — they say where the key IS. The pad's Home and the
+// main cluster's are the same action struck in two places, so a keymap that
+// binds "Home" means both unless it says otherwise, and one that has never
+// heard of the keypad keeps working the day a pad key first arrives.
+//
+// This is a fallback, not a spelling: "P-Home" and "Home" are different keys
+// and the difference survives. Dropping is enumerated after the P-/p- swap and
+// after the sequence as pressed, so binding either pad form — or both — takes
+// the pad key back out of the plain binding's reach.
+var droppablePrefixes = map[string]bool{"P-": true, "p-": true}
 
 // prefixSiblings maps each modifier spelling to its whole group.
 var prefixSiblings = func() map[string][]string {
@@ -715,6 +732,12 @@ func permuteStack(mods []string) [][]string {
 // written: each component varied across its fallback group, and the whole stack
 // put in canonical order. Order is not meaning, so a keymap that writes
 // "S-C-Up" is naming the same key as one that writes "C-S-Up".
+//
+// A droppable component also varies to nothing, which is how a keypad key
+// reaches the plain binding for the action it duplicates. That one is a
+// fallback rather than a spelling, so it is enumerated last within its
+// component and only ever widens the pressed side: nothing here gives "Home"
+// a route to a binding written "P-Home".
 func prefixSpellings(prefix string) []string {
 	mods, rest := splitModifierStack(prefix)
 	if len(mods) == 0 {
@@ -739,6 +762,10 @@ func prefixSpellings(prefix string) []string {
 			variants := prefixSiblings[comp]
 			if len(variants) == 0 {
 				variants = []string{comp}
+			}
+			if droppablePrefixes[comp] {
+				// Copy first: the group slice is shared by every member.
+				variants = append(append([]string(nil), variants...), "")
 			}
 			next := make([]string, 0, len(combos)*len(variants))
 			for _, sofar := range combos {

@@ -38,10 +38,12 @@ func TestModifierOrderDoesNotMatter(t *testing.T) {
 
 // The canonical order follows the order macOS renders modifiers (⌃⌥⇧⌘),
 // extended with the ones a Mac keyboard has no cap for. Control's caret form
-// sorts last so it lands against the base key.
+// sorts last so it lands against the base key, and the keypad prefixes sit
+// just ahead of it: they are the only two that say where a key IS rather than
+// what was held with it, so they belong nearest what they qualify.
 func TestCanonicalOrder(t *testing.T) {
-	got := canonicalizeStack([]string{"^", "H-", "s-", "S-", "m-", "M-", "G-", "C-"})
-	want := []string{"C-", "G-", "M-", "m-", "S-", "s-", "H-", "^"}
+	got := canonicalizeStack([]string{"^", "P-", "H-", "s-", "S-", "p-", "m-", "M-", "G-", "C-"})
+	want := []string{"C-", "G-", "M-", "m-", "S-", "s-", "H-", "P-", "p-", "^"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("canonicalizeStack = %v, want %v", got, want)
 	}
