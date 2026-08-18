@@ -61,6 +61,21 @@ func (sp *Processor) SetMacOptionInsert(enabled bool) {
 	sp.macOptionInsert = enabled
 }
 
+// SetMacOptionObserved installs a lookup of what the HOST watched its own
+// keyboard compose, consulted ahead of the built-in table.
+//
+// The table above is one keyboard written down — the US layout, from memory. A
+// host that receives the composed character alongside the keystroke knows what
+// this machine actually produced, which is better evidence than any table, and
+// it is the only evidence that is right when the two disagree. Pass nil to go
+// back to the table alone.
+//
+// The layer's on/off switch still governs: an observation is a better answer to
+// the question, not a reason to answer a question that was turned off.
+func (sp *Processor) SetMacOptionObserved(lookup func(key string) (string, bool)) {
+	sp.macOptionObserved = lookup
+}
+
 // MacOptionChar returns the character macOS Option produces for a Mega key
 // name, and whether the layer applies to it: false when the layer is off, or
 // when the key is not one Option composes.
@@ -75,6 +90,11 @@ func (sp *Processor) SetMacOptionInsert(enabled bool) {
 func (sp *Processor) MacOptionChar(key string) (string, bool) {
 	if !sp.macOptionInsert {
 		return "", false
+	}
+	if sp.macOptionObserved != nil {
+		if ch, ok := sp.macOptionObserved(key); ok {
+			return ch, true
+		}
 	}
 	ch, ok := macOptionChars[key]
 	return ch, ok

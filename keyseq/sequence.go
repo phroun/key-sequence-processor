@@ -126,6 +126,11 @@ type Processor struct {
 	// macOptionInsert enables the Option-character layer (see MacOptionChar).
 	macOptionInsert bool
 
+	// macOptionObserved answers what the HOST watched its own keyboard
+	// compose for a chord, and is asked before the built-in table (see
+	// SetMacOptionObserved). nil where the host cannot see it.
+	macOptionObserved func(key string) (string, bool)
+
 	// Sequence tracking
 	sequenceStarters        map[string]bool
 	controlSequenceStarters map[string]bool

@@ -68,3 +68,38 @@ func TestUnboundMegaKeyTypesItsOptionCharacter(t *testing.T) {
 		t.Errorf("dispatched %v, want %v — an unbound Option combo must still type", h.calls, want)
 	}
 }
+
+// What the host WATCHED its keyboard compose outranks the table.
+//
+// The table is one keyboard written down; an observation is the machine being
+// typed on. Where they disagree the observation is the one that is right, and
+// where there is no observation the table still answers.
+func TestObservedOptionCharBeatsTheTable(t *testing.T) {
+	p := NewProcessor(nil)
+	p.SetMacOptionInsert(true)
+
+	if ch, ok := p.MacOptionChar("M-a"); !ok || ch != "å" {
+		t.Fatalf("precondition: the table says M-a is %q ok=%v", ch, ok)
+	}
+
+	p.SetMacOptionObserved(func(key string) (string, bool) {
+		if key == "M-a" {
+			return "ä", true
+		}
+		return "", false
+	})
+	if ch, ok := p.MacOptionChar("M-a"); !ok || ch != "ä" {
+		t.Errorf("M-a = %q ok=%v, want the observed ä", ch, ok)
+	}
+	// Unobserved chords still come from the table.
+	if ch, ok := p.MacOptionChar("M-x"); !ok || ch != "≈" {
+		t.Errorf("M-x = %q ok=%v, want the table's ≈", ch, ok)
+	}
+
+	// The layer's switch still governs: an observation is a better answer to
+	// the question, not a reason to answer one that was turned off.
+	p.SetMacOptionInsert(false)
+	if ch, ok := p.MacOptionChar("M-a"); ok {
+		t.Errorf("M-a = %q with the layer off, want nothing", ch)
+	}
+}
