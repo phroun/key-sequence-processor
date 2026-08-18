@@ -211,8 +211,8 @@ Pass `nil` to drop fallbacks entirely.
 |--------|----------|
 | `C-`, `^` | Control — two spellings of one modifier |
 | `G-` | Glyph (AltGr / ISO_Level3_Shift; a private kitty bit) |
-| `M-` | Meta, as induced by the PC Alt key |
-| `m-` | Meta proper — the key a Space Cadet keyboard had its own cap for |
+| `M-` | Mega, PC Alt key or Mac Option key, Emacs Meta |
+| `m-` | Micro, X11 Meta heritage |
 | `S-` | Shift |
 | `s-` | Super / Command |
 | `H-` | Hyper |
@@ -322,10 +322,10 @@ MIT — see [LICENSE](LICENSE).
   bindings and in presses alike. Matching compared whole tokens before, so the
   two were unrelated strings — while the input layers composing them disagreed
   about the order, which made the keymap inherit the argument.
-- Added `H-` (Hyper) and `m-` (Meta proper, distinct from the Alt-induced `M-`)
+- Added `H-` (Hyper) and `m-` (Micro, X11 Meta, distinct from the Alt-induced `M-`)
   as first-class modifiers. `m-` falls back to `M-` unless a keymap names both.
 - Modifier prefixes have a canonical order — `C- G- M- m- S- s- H- ^` — and
-  `A-` is gone: the PC Alt key induces Meta, spelled `M-`.
+  `A-` is gone: the PC Alt key induces Mega, spelled `M-`.
 - Added `Comma`, `Period`/`Dot` and `Octothorpe` to the punctuation spellings.
   Together with `Semicolon` and `Equals` these are what make a config file's own
   metacharacters bindable at all — `;` and `#` start comments, `=` separates key
