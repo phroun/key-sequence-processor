@@ -126,6 +126,11 @@ type Processor struct {
 	// macOptionInsert enables the Option-character layer (see MacOptionChar).
 	macOptionInsert bool
 
+	// keyChordText answers what the HOST watched its own keyboard TYPE for a
+	// chord, and is asked before the built-in table (see SetKeyChordText).
+	// nil where the host cannot see it.
+	keyChordText func(chord string) (string, bool)
+
 	// Sequence tracking
 	sequenceStarters        map[string]bool
 	controlSequenceStarters map[string]bool
