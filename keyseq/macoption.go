@@ -1,5 +1,7 @@
 package keyseq
 
+import "strings"
+
 // macOptionChars maps Mega key names back to the character macOS Option
 // produces for that key (US layout).
 //
@@ -62,16 +64,21 @@ func (sp *Processor) SetMacOptionInsert(enabled bool) {
 }
 
 // SetKeyChordText installs a lookup of what the HOST watched its own keyboard
-// TYPE for a chord, consulted ahead of the built-in table.
+// TYPE for a chord, which TextForKey consults ahead of everything it would
+// otherwise derive.
 //
 // The table above is one keyboard written down — the US layout, from memory. A
 // host that receives the text alongside the keystroke knows what this machine
 // actually produced, which is better evidence than any table, and the only
 // evidence that is right when the two disagree. Pass nil to go back to the
-// table alone.
+// derivations alone.
 //
-// The layer's on/off switch still governs: an observation is a better answer to
-// the question, not a reason to answer a question that was turned off.
+// The lookup's second result means OBSERVED, not non-empty. A host that watched
+// a key type nothing says so by answering "" and true, and that is a different
+// answer from never having seen the key.
+//
+// Install it whatever the Option layer's switch says. That switch governs the
+// table, which is a guess; it is no reason to withhold what was seen.
 func (sp *Processor) SetKeyChordText(lookup func(chord string) (string, bool)) {
 	sp.keyChordText = lookup
 }
@@ -80,22 +87,65 @@ func (sp *Processor) SetKeyChordText(lookup func(chord string) (string, bool)) {
 // name, and whether the layer applies to it: false when the layer is off, or
 // when the key is not one Option composes.
 //
-// A default handler consults this to decide what an unbound M- key types, and
-// spells the command itself — the character is a keyboard fact, the command is
-// the application's vocabulary:
-//
-//	if ch, ok := p.MacOptionChar(key); ok {
-//		return "insert '" + escape(ch) + "'"
-//	}
+// This is the LAYER's answer alone — the table above and its switch. What an
+// unbound key types is a wider question, and TextForKey answers that one.
 func (sp *Processor) MacOptionChar(key string) (string, bool) {
 	if !sp.macOptionInsert {
 		return "", false
 	}
-	if sp.keyChordText != nil {
-		if ch, ok := sp.keyChordText(key); ok {
-			return ch, true
-		}
-	}
 	ch, ok := macOptionChars[key]
 	return ch, ok
+}
+
+// TextForKey returns the text an unbound key types, and whether that is known.
+//
+// known with EMPTY text is an answer, and a different one from not knowing: the
+// key types nothing. A macOS dead key is that — Option+i arms a circumflex for
+// the next keystroke and produces no character of its own — and an application
+// that reads the empty string as "no answer" goes on to guess, and inserts an
+// accent the keyboard never produced.
+//
+// The order is what the answers are worth:
+//
+//   - What the HOST watched this keyboard type for the chord, if it has been
+//     given a lookup (SetKeyChordText). It saw both halves of the keystroke;
+//     everything below derives an answer from the key's NAME, which is a good
+//     guess and only a guess.
+//   - A one-character name IS that character.
+//   - A Glyph token carries its glyph: "G-€" types "€". The character rides in
+//     the token, so no lookup is needed to unroll it.
+//   - The macOS Option layer, for a Mega chord, when it is switched on.
+//
+// The application spells the command: the character is a keyboard fact, the
+// command is the application's vocabulary.
+//
+//	if text, known := p.TextForKey(key); known {
+//		if text == "" {
+//			return ""	// the key types nothing
+//		}
+//		return "insert '" + escape(text) + "'"
+//	}
+func (sp *Processor) TextForKey(key string) (string, bool) {
+	if key == "" {
+		return "", false
+	}
+	// Asked first, and not gated by the Option switch: that switch says "stop
+	// guessing", which is no reason to refuse an answer arrived at by looking.
+	if sp.keyChordText != nil {
+		if text, observed := sp.keyChordText(key); observed {
+			return text, true
+		}
+	}
+	if r := []rune(key); len(r) == 1 {
+		return key, true
+	}
+	if glyph, ok := strings.CutPrefix(key, "G-"); ok {
+		if r := []rune(glyph); len(r) == 1 {
+			return glyph, true
+		}
+	}
+	if ch, ok := sp.MacOptionChar(key); ok {
+		return ch, true
+	}
+	return "", false
 }
