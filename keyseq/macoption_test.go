@@ -82,8 +82,8 @@ func TestObservedOptionCharBeatsTheTable(t *testing.T) {
 		t.Fatalf("precondition: the table says M-a is %q ok=%v", ch, ok)
 	}
 
-	p.SetMacOptionObserved(func(key string) (string, bool) {
-		if key == "M-a" {
+	p.SetKeyChordText(func(chord string) (string, bool) {
+		if chord == "M-a" {
 			return "ä", true
 		}
 		return "", false
