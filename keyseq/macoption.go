@@ -133,19 +133,50 @@ func (sp *Processor) TextForKey(key string) (string, bool) {
 	// guessing", which is no reason to refuse an answer arrived at by looking.
 	if sp.keyChordText != nil {
 		if text, observed := sp.keyChordText(key); observed {
-			return text, true
+			return sp.applyDeadKey(text, observed)
 		}
 	}
+	// A dead-key chord answers "nothing, yet" and arms an accent for the next
+	// keystroke — but only where nobody WATCHED it, which is the same order of
+	// authority as everything above.
+	//
+	// A host that watched its own keyboard was there for the composition too. A
+	// dead key on such a host is answered by the machine that owns the
+	// keyboard: macOS composes Option+i then "u" into "û" and delivers the
+	// finished character, and the chord it reports along the way types nothing
+	// and means nothing more. Arming there would leave an accent waiting for a
+	// keystroke that has already been accounted for, and it would attach itself
+	// to whatever is typed next.
+	//
+	// Nobody watching means nobody composed. See deadkey.go.
+	if sp.armDeadKey(key) {
+		return "", true
+	}
 	if r := []rune(key); len(r) == 1 {
-		return key, true
+		return sp.applyDeadKey(key, true)
 	}
 	if glyph, ok := strings.CutPrefix(key, "G-"); ok {
 		if r := []rune(glyph); len(r) == 1 {
-			return glyph, true
+			return sp.applyDeadKey(glyph, true)
 		}
 	}
 	if ch, ok := sp.MacOptionChar(key); ok {
-		return ch, true
+		return sp.applyDeadKey(ch, true)
 	}
+	// A key that types nothing leaves the accent armed. It is not an answer to
+	// the dead key — an arrow moves the caret, a binding runs — and the accent
+	// belongs to the next keystroke that types, whichever that turns out to be.
+	// An application that would rather drop it there calls ResetDeadKey.
 	return "", false
+}
+
+// applyDeadKey spends a pending accent on text about to be typed. Written once
+// so every route into TextForKey's answer goes through it and none can return
+// text with an accent still waiting behind it.
+func (sp *Processor) applyDeadKey(text string, known bool) (string, bool) {
+	if text == "" {
+		return text, known
+	}
+	whole, _ := sp.takeDeadKey(text)
+	return whole, known
 }
