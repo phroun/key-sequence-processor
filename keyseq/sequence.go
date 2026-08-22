@@ -131,6 +131,10 @@ type Processor struct {
 	// nil where the host cannot see it.
 	keyChordText func(chord string) (string, bool)
 
+	// deadKey is the accent a dead-key chord has armed for the next keystroke,
+	// and is empty when none is pending. See deadkey.go.
+	deadKey string
+
 	// Sequence tracking
 	sequenceStarters        map[string]bool
 	controlSequenceStarters map[string]bool
